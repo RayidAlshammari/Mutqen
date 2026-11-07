@@ -1,0 +1,70 @@
+@import "tailwindcss";
+@import "@fontsource/ibm-plex-sans-arabic/400.css";
+@import "@fontsource/ibm-plex-sans-arabic/500.css";
+@import "@fontsource/ibm-plex-sans-arabic/600.css";
+@import "@fontsource/ibm-plex-sans-arabic/700.css";
+
+@theme {
+  --font-sans: "IBM Plex Sans Arabic", system-ui, sans-serif;
+
+  /* brand: deep palm green + warm sand + saffron accent */
+  --color-brand-50: #eef7f3;
+  --color-brand-100: #d5ece2;
+  --color-brand-200: #acd8c6;
+  --color-brand-300: #7bbda5;
+  --color-brand-400: #4c9e83;
+  --color-brand-500: #2f8269;
+  --color-brand-600: #216853;
+  --color-brand-700: #1b5444;
+  --color-brand-800: #164337;
+  --color-brand-900: #10322a;
+  --color-brand-950: #0a211b;
+
+  --color-sand-50: #fbf9f4;
+  --color-sand-100: #f5f0e4;
+  --color-sand-200: #ebe2cc;
+  --color-sand-300: #dccdaa;
+
+  --color-saffron-400: #f0b44c;
+  --color-saffron-500: #e39a1f;
+  --color-saffron-600: #c47c10;
+
+  --color-ink: #1b1f1d;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-sand-50);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Latin tokens (tool names, numbers) read better with a touch of letter spacing */
+.ltr {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.pattern-dots {
+  background-image: radial-gradient(rgb(255 255 255 / 0.12) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+.cover-content {
+  background: linear-gradient(135deg, #1b5444 0%, #2f8269 55%, #7bbda5 100%);
+}
+.cover-media {
+  background: linear-gradient(135deg, #5b2a1d 0%, #c47c10 60%, #f0b44c 100%);
+}
+.cover-code {
+  background: linear-gradient(135deg, #10202e 0%, #1f4b66 55%, #4c9e83 100%);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
+}
