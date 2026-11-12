@@ -1,6 +1,9 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { computeFees, FEES } from "@/lib/constants";
-import { gradeVerification, structureBrief, PASS_SCORE } from "@/lib/ai";
+import { cleanText, gradeVerification, PASS_SCORE } from "@/lib/ai";
+import { composeBrief, startBrief, QUESTION_BANK } from "@/lib/brief";
+import { CONDUCT_QUIZ, gradeConduct } from "@/lib/conduct";
+import { arCount, COUNT } from "@/lib/utils";
 
 beforeAll(() => {
   // force the deterministic offline mode
@@ -25,16 +28,72 @@ describe("computeFees", () => {
   });
 });
 
-describe("structureBrief (offline fallback)", () => {
+describe("guided brief (offline fallback)", () => {
   it.each([
     ["أبي فيديو ريلز لعطر جديد", "media"],
     ["أبي شات بوت واتساب لمتجري", "code"],
     ["أبي منشورات انستقرام لكافيهي", "content"],
-  ])("%s → %s", async (text, category) => {
-    const r = await structureBrief(text);
+  ] as const)("%s → %s questions", async (text, category) => {
+    const r = await startBrief(text);
     expect(r.source).toBe("fallback");
-    expect(r.brief.category).toBe(category);
-    expect(r.brief.deliverables.length).toBeGreaterThan(0);
+    expect(r.category).toBe(category);
+    expect(r.questions).toEqual(QUESTION_BANK[category]);
+  });
+
+  it("turns answers into deliverables and acceptance criteria, and keeps what the client chose", async () => {
+    const { brief } = await composeBrief({
+      input: "أبي 12 منشور انستقرام لكافيهي",
+      category: "content",
+      answers: [
+        { q: "وش نشاطك، ومين عملاؤك؟", a: "مقهى مختص في حائل" },
+        { q: "كم قطعة تحتاج، ولأي منصة؟", a: "12 منشور انستقرام" },
+        { q: "بأي لهجة ونبرة؟", a: "نجدية" },
+      ],
+      style: ["عصري"],
+      colors: ["ترابي دافئ"],
+      references: [],
+      assets: [{ label: "الشعار", url: "https://example.org/logo.png" }],
+    });
+    expect(brief.category).toBe("content");
+    expect(brief.deliverables[0]).toContain("12 منشور");
+    expect(brief.acceptance?.length).toBeGreaterThanOrEqual(3);
+    expect(brief.tone).toBe("نجدية");
+    expect(brief.colors).toEqual(["ترابي دافئ"]);
+    expect(brief.assets).toHaveLength(1);
+  });
+});
+
+describe("cleanText", () => {
+  it("drops characters from scripts the site does not use", () => {
+    expect(cleanText("محتوى מעולה ممتاز 你好 ok")).toBe("محتوى ممتاز ok");
+  });
+  it("limits length", () => {
+    expect(cleanText("أ".repeat(50), 10)).toHaveLength(10);
+  });
+});
+
+describe("conduct quiz", () => {
+  it("passes with every scenario answered by the platform rules", () => {
+    const all = Object.fromEntries(CONDUCT_QUIZ.map((q) => [q.id, q.correct]));
+    expect(gradeConduct(all)).toMatchObject({ score: 100, passed: true, missed: [] });
+  });
+  it("fails and explains the rule when two scenarios are wrong", () => {
+    const answers = Object.fromEntries(CONDUCT_QUIZ.map((q, i) => [q.id, i < 2 ? (q.correct + 1) % q.options.length : q.correct]));
+    const r = gradeConduct(answers);
+    expect(r.passed).toBe(false);
+    expect(r.missed).toHaveLength(2);
+  });
+});
+
+describe("Arabic counts", () => {
+  it.each([
+    [1, "خدمة واحدة"],
+    [2, "خدمتين"],
+    [4, "٤ خدمات"],
+    [11, "١١ خدمة"],
+    [103, "١٠٣ خدمات"],
+  ])("%i → %s", (n, text) => {
+    expect(arCount(n, COUNT.services)).toBe(text);
   });
 });
 

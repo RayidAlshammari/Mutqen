@@ -1,16 +1,36 @@
 import { test, expect } from "@playwright/test";
-import { as, login, DEMO } from "./helpers";
+import { as, buildBrief, login, DEMO } from "./helpers";
 
 test("protected pages require the right role", async ({ page }) => {
-  for (const path of ["/admin", "/admin/orders", "/dashboard", "/seller/onboarding", "/order/new?service=x"]) {
+  for (const path of ["/admin", "/admin/orders", "/admin/managed", "/admin/freelancers", "/dashboard", "/notifications", "/seller/onboarding"]) {
     await page.goto(path);
     await expect(page).toHaveURL(/\/login/);
   }
   await login(page, DEMO.buyer);
-  for (const path of ["/admin", "/admin/orders", "/seller/services", "/seller/profile"]) {
+  for (const path of ["/admin", "/admin/orders", "/admin/managed", "/admin/freelancers", "/seller/services", "/seller/profile"]) {
     await page.goto(path);
     await expect(page).toHaveURL(/\/dashboard$/);
   }
+});
+
+test("a brief belongs to the browser or account that created it", async ({ browser, page }) => {
+  const path = await buildBrief(page, "أبي شعار لمقهى مختص جديد في حائل");
+  const other = await browser.newContext();
+  const stranger = await other.newPage();
+  expect((await stranger.goto(path))?.status()).toBe(404);
+  await other.close();
+  const buyer = await as(browser, DEMO.buyer);
+  expect((await buyer.page.goto(path))?.status()).toBe(404);
+  // Checkout refuses a brief that is not yours.
+  expect((await buyer.page.goto(`/order/new?brief=${path.split("/")[2]}&service=s_missing&tier=basic`))?.status()).toBe(404);
+  await buyer.close();
+});
+
+test("ordering without a brief sends the client to build one", async ({ page }) => {
+  await page.goto("/services?category=content");
+  const href = await page.locator('a[href^="/services/s_"]').first().getAttribute("href");
+  await page.goto(`/order/new?service=${href!.split("/")[2]}&tier=basic`);
+  await expect(page).toHaveURL(/\/brief\?service=s_/);
 });
 
 test("a client cannot open someone else's order", async ({ browser }) => {
@@ -36,16 +56,15 @@ test("freelancer cannot order their own service or save script links", async ({ 
   await login(page, DEMO.seller);
   await page.goto("/seller/services");
   const href = await page.locator('a[href^="/services/s_"]').first().getAttribute("href");
-  await page.goto(`/order/new?service=${href!.split("/")[2]}&tier=basic`);
-  await page.fill("#brief", "طلب اختبار لخدمتي أنا نفسي للتحقق من الصلاحيات");
-  await page.check("input[name=agree]");
-  await page.click("button[type=submit]");
+  await buildBrief(page, "أبي منشورات انستقرام لمحل حلويات", `/brief?service=${href!.split("/")[2]}&tier=basic`);
+  // Her own services are never recommended to her, and the direct link is refused.
+  await expect(page.locator(`a[href*="service=${href!.split("/")[2]}"]`)).toHaveCount(0);
+  await page.goto(`/order/new?brief=${new URL(page.url()).pathname.split("/")[2]}&service=${href!.split("/")[2]}&tier=basic`);
   await expect(page.getByText("ما تقدر تطلب خدمتك أنت.")).toBeVisible();
 
   await page.goto("/seller/profile");
-  await page.fill("input[name=pf_title_0]", "عمل");
-  await page.locator("input[name=pf_url_0]").evaluate((el: HTMLInputElement) => (el.type = "text"));
-  await page.fill("input[name=pf_url_0]", "javascript:alert(1)");
+  await page.fill("input[name=pf_title_3]", "عمل");
+  await page.fill("input[name=pf_url_3]", "javascript:alert(1)");
   await page.getByRole("button", { name: "احفظ التعديلات" }).click();
   await expect(page.getByText(/لازم يبدأ بـ https/)).toBeVisible();
 });
@@ -83,6 +102,6 @@ test("each role lands where it works", async ({ browser }) => {
 
   const buyer = await as(browser, DEMO.buyer);
   await buyer.page.goto("/");
-  await expect(buyer.page.getByText("الإطلاق التجريبي قريب")).toHaveCount(0);
+  await expect(buyer.page.getByRole("heading", { level: 1 })).toContainText("بجملة وحدة");
   await buyer.close();
 });
