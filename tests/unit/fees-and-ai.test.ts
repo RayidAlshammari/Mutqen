@@ -10,15 +10,18 @@ beforeAll(() => {
 });
 
 describe("computeFees", () => {
-  it("splits a package price into client total, commission and earning", () => {
+  it("charges the client the listed price and takes 15% from the freelancer", () => {
     const f = computeFees(1000);
-    expect(f).toMatchObject({ price: 1000, buyerFee: 50, total: 1050, platformCommission: 100, sellerEarning: 900, platformRevenue: 150 });
+    expect(f).toMatchObject({ price: 1000, total: 1000, platformCommission: 150, sellerEarning: 850, platformRevenue: 150 });
   });
-  it("keeps the money consistent for odd prices", () => {
+  it("drops to 10% from the fourth completed order with the same client", () => {
+    expect(computeFees(1000, FEES.repeatAfterOrders - 1).platformCommission).toBe(150);
+    expect(computeFees(1000, FEES.repeatAfterOrders).platformCommission).toBe(100);
+  });
+  it("never loses a riyal to rounding", () => {
     const f = computeFees(333);
-    expect(f.total).toBe(f.price + f.buyerFee);
     expect(f.sellerEarning + f.platformCommission).toBe(f.price);
-    expect(f.buyerFee).toBe(Math.round(333 * FEES.buyerFeeRate));
+    expect(f.total).toBe(f.price);
   });
 });
 

@@ -39,8 +39,8 @@ export default function HowItWorks() {
         <h2 className="text-xl font-bold">الرسوم — بوضوح</h2>
         <div className="mt-4 grid gap-6 md:grid-cols-2">
           <div className="space-y-2 text-[15px] leading-7">
-            <p>• <strong>العميل</strong> يدفع رسوم خدمة {num(FEES.buyerFeeRate * 100)}٪ فوق سعر الباقة.</p>
-            <p>• <strong>المستقل</strong> يدفع عمولة {num(FEES.sellerCommissionRate * 100)}٪ من سعر الباقة — نصف ما تأخذه أشهر المنصات العالمية تقريباً.</p>
+            <p>• <strong>العميل</strong> يدفع السعر المعروض فقط. ما فيه رسوم تنضاف عند الدفع.</p>
+            <p>• <strong>المستقل</strong> تنخصم منه عمولة {num(FEES.commissionRate * 100)}٪، وتنزل إلى {num(FEES.repeatCommissionRate * 100)}٪ بعد {num(FEES.repeatAfterOrders)} طلبات مكتملة مع نفس العميل.</p>
             <p>• التسجيل وإضافة الخدمات مجاني.</p>
           </div>
           <div className="rounded-xl bg-sand-50 p-4 text-sm ring-1 ring-sand-200">

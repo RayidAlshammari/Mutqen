@@ -46,7 +46,7 @@ export default async function NewOrderPage({ searchParams }: { searchParams: Pro
           </Card>
           <Card className="p-5 text-sm">
             <div className="flex justify-between py-1"><span>سعر الباقة</span><span>{sar(fees.price)}</span></div>
-            <div className="flex justify-between py-1 text-stone-600"><span>رسوم الخدمة (٥٪)</span><span>{sar(fees.buyerFee)}</span></div>
+            <div className="flex justify-between py-1 text-stone-600"><span>رسوم إضافية</span><span>لا يوجد</span></div>
             <div className="mt-2 flex justify-between border-t border-sand-200 pt-3 text-base font-bold"><span>الإجمالي</span><span>{sar(fees.total)}</span></div>
             <p className="mt-3 text-xs leading-5 text-stone-500">🔒 المبلغ محجوز لدى متقن طوال مدة التنفيذ (Escrow).</p>
           </Card>

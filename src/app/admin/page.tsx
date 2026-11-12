@@ -13,7 +13,7 @@ export const metadata = { title: "لوحة الإدارة" };
 export default async function AdminPage() {
   await requireRole("admin", "/admin");
   const [s, pending, orders, waitlist] = await Promise.all([platformStats(), pendingSellers(), recentOrdersAdmin(), recentWaitlist()]);
-  const takeRate = s.gmv ? (s.revenue / s.gmv) * 100 : 0;
+  const takeRate = s.completedGmv ? (s.revenue / s.completedGmv) * 100 : 0;
   const repeat = s.buyers ? (s.repeatBuyers / s.buyers) * 100 : 0;
 
   return (
@@ -23,7 +23,7 @@ export default async function AdminPage() {
       <h2 className="mb-3 font-bold text-stone-700">الطلبات والإيراد</h2>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="إجمالي قيمة الطلبات (GMV)" value={sar(s.gmv)} />
-        <Stat label="إيراد المنصة (طلبات مكتملة)" value={sar(s.revenue)} hint={`Take rate فعلي ≈ ${num(Math.round(takeRate))}٪`} />
+        <Stat label="إيراد المنصة (طلبات مكتملة)" value={sar(s.revenue)} hint={`نسبة المنصة من الطلبات المكتملة ≈ ${num(Math.round(takeRate))}٪`} />
         <Stat label="مبالغ محجوزة (Escrow)" value={sar(s.escrow)} />
         <Stat label="الطلبات" value={`${num(s.completed)} / ${num(s.orders)}`} hint="مكتملة / الكل" />
       </div>

@@ -13,7 +13,7 @@ import {
 import { getOrder } from "@/lib/queries";
 import { requireUser } from "@/lib/session";
 import { AUTO_COMPLETE_DAYS, CATEGORIES, ORDER_STATUS } from "@/lib/constants";
-import { formatDate, relativeTime, sar } from "@/lib/utils";
+import { formatDate, num, relativeTime, sar } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -176,14 +176,13 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
             </div>
             {isBuyer ? (
               <>
-                <div className="flex justify-between py-1"><span className="text-stone-600">سعر الباقة</span><span>{sar(o.price)}</span></div>
-                <div className="flex justify-between py-1"><span className="text-stone-600">رسوم الخدمة</span><span>{sar(o.buyerFee)}</span></div>
-                <div className="flex justify-between border-t border-sand-200 pt-2 font-bold"><span>المدفوع</span><span>{sar(o.price + o.buyerFee)}</span></div>
+                <div className="flex justify-between py-1 font-bold"><span>المدفوع</span><span>{sar(o.price + o.buyerFee)}</span></div>
+                <p className="text-xs text-stone-500">السعر النهائي، بدون أي رسوم إضافية.</p>
               </>
             ) : (
               <>
                 <div className="flex justify-between py-1"><span className="text-stone-600">سعر الباقة</span><span>{sar(o.price)}</span></div>
-                <div className="flex justify-between py-1"><span className="text-stone-600">عمولة متقن (١٠٪)</span><span>- {sar(o.platformCommission)}</span></div>
+                <div className="flex justify-between py-1"><span className="text-stone-600">عمولة متقن ({num(Math.round((o.platformCommission / o.price) * 100))}٪)</span><span>- {sar(o.platformCommission)}</span></div>
                 <div className="flex justify-between border-t border-sand-200 pt-2 font-bold"><span>صافي أرباحك</span><span>{sar(o.sellerEarning)}</span></div>
               </>
             )}

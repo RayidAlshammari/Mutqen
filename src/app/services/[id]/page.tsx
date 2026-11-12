@@ -5,7 +5,7 @@ import { ServiceCover } from "@/components/service-card";
 import { PackagePicker } from "@/components/package-picker";
 import { getService } from "@/lib/queries";
 import { getCurrentUser } from "@/lib/session";
-import { CATEGORIES, FEES } from "@/lib/constants";
+import { CATEGORIES } from "@/lib/constants";
 import { num, relativeTime } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -92,7 +92,7 @@ export default async function ServicePage({ params }: { params: Promise<{ id: st
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-24 lg:h-fit">
-          <PackagePicker serviceId={s.id} packages={s.packages} buyerFeeRate={FEES.buyerFeeRate} disabledReason={disabledReason} />
+          <PackagePicker serviceId={s.id} packages={s.packages} disabledReason={disabledReason} />
           <Card className="p-5">
             <div className="flex items-center gap-3">
               <Avatar name={seller.displayName} size={48} />

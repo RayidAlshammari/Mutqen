@@ -59,8 +59,9 @@ export default async function SettingsPage() {
         <Card className="space-y-3 p-6">
           <h2 className="font-bold">إعدادات المنصة</h2>
           <div className="grid gap-2 text-sm">
-            <div className="flex justify-between"><span>رسوم الخدمة على العميل</span><strong>{num(FEES.buyerFeeRate * 100)}٪</strong></div>
-            <div className="flex justify-between"><span>عمولة المستقل</span><strong>{num(FEES.sellerCommissionRate * 100)}٪</strong></div>
+            <div className="flex justify-between"><span>رسوم على العميل</span><strong>لا يوجد — يدفع السعر المعروض فقط</strong></div>
+            <div className="flex justify-between"><span>عمولة متقن من المستقل</span><strong>{num(FEES.commissionRate * 100)}٪</strong></div>
+            <div className="flex justify-between"><span>بعد {num(FEES.repeatAfterOrders)} طلبات مكتملة مع نفس العميل</span><strong>{num(FEES.repeatCommissionRate * 100)}٪</strong></div>
             <div className="flex justify-between"><span>إيراد المنصة من طلب بـ {sar(ex.price)}</span><strong>{sar(ex.platformRevenue)}</strong></div>
             <div className="flex justify-between"><span>الذكاء الاصطناعي</span><Badge tone={aiConfigured() ? "green" : "gray"}>{aiConfigured() ? `متصل (${process.env.AI_MODEL})` : "وضع بدون اتصال"}</Badge></div>
             <div className="flex justify-between"><span>التحقق من الجوال (Authentica)</span><Badge tone={authenticaEnabled() ? "green" : "gray"}>{authenticaEnabled() ? "مفعّل" : "غير مفعّل"}</Badge></div>

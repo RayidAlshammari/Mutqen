@@ -6,25 +6,36 @@ export const SITE = {
   tagline: "مستقلون سعوديون متحقق من تمكنهم في الذكاء الاصطناعي، ينجزون شغلك في أيام مو أسابيع",
 };
 
-/** Business model levers: client service fee + freelancer commission. */
+/**
+ * Business model: one commission, taken from the freelancer's side only.
+ * The client pays exactly the listed price — nothing is added at checkout.
+ * The commission drops for repeat work with the same client, so staying on the
+ * platform is cheaper than leaving it.
+ */
 export const FEES = {
-  buyerFeeRate: 0.05, // added on top of the package price, paid by the client
-  sellerCommissionRate: 0.1, // deducted from the freelancer's earning
+  commissionRate: 0.15,
+  repeatCommissionRate: 0.1,
+  /** Completed orders with the same client before the lower rate applies. */
+  repeatAfterOrders: 3,
 };
+
+export const commissionRateFor = (completedWithSameClient: number) =>
+  completedWithSameClient >= FEES.repeatAfterOrders ? FEES.repeatCommissionRate : FEES.commissionRate;
 
 /** Deliveries left unreviewed this long are completed automatically. */
 export const AUTO_COMPLETE_DAYS = 3;
 
-export function computeFees(price: number) {
-  const buyerFee = Math.round(price * FEES.buyerFeeRate);
-  const platformCommission = Math.round(price * FEES.sellerCommissionRate);
+export function computeFees(price: number, completedWithSameClient = 0) {
+  const rate = commissionRateFor(completedWithSameClient);
+  const platformCommission = Math.round(price * rate);
   return {
     price,
-    buyerFee,
-    total: price + buyerFee,
+    /** What the client pays: the listed price, with nothing on top. */
+    total: price,
+    rate,
     platformCommission,
     sellerEarning: price - platformCommission,
-    platformRevenue: buyerFee + platformCommission,
+    platformRevenue: platformCommission,
   };
 }
 
