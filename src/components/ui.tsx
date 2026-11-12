@@ -154,7 +154,8 @@ export function Avatar({ name, size = 40 }: { name: string; size?: number }) {
     .split(" ")
     .filter(Boolean)
     .slice(0, 2)
-    .map((p) => p[0])
+    // "الديرة" → "د": the definite article is not an initial.
+    .map((p) => (p.length > 3 && p.startsWith("ال") ? p[2] : p[0]))
     .join(" ");
   const color = avatarColors[[...name].reduce((s, c) => s + c.charCodeAt(0), 0) % avatarColors.length];
   return (

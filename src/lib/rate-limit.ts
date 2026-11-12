@@ -27,7 +27,7 @@ export async function clientIp() {
 }
 
 export const LIMITS = {
-  assistantAnon: { limit: 5, window: 3600 }, // per IP per hour
+  assistantAnon: { limit: 24, window: 3600 }, // per IP per hour; a brief takes two calls and offices share one IP
   assistantUser: { limit: 30, window: 3600 }, // per account per hour
   verification: { limit: 3, window: 3600 }, // AI grading attempts per seller per hour
   waitlist: { limit: 10, window: 3600 }, // per IP per hour

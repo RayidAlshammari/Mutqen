@@ -6,7 +6,8 @@ import { PackagePicker } from "@/components/package-picker";
 import { getService } from "@/lib/queries";
 import { getCurrentUser } from "@/lib/session";
 import { CATEGORIES } from "@/lib/constants";
-import { num, relativeTime } from "@/lib/utils";
+import { arCount, COUNT, num, relativeTime } from "@/lib/utils";
+import { recordLines, sellerRecords } from "@/lib/match";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,9 @@ export default async function ServicePage({ params }: { params: Promise<{ id: st
   if (!data || (!data.service.active && user?.id !== data.service.sellerId)) notFound();
   const { service: s, seller, reviews } = data;
   const isOwner = user?.id === s.sellerId;
+  const record = (await sellerRecords([s.sellerId], s.category)).get(s.sellerId)!;
+  const facts = recordLines(record, CATEGORIES[s.category].label);
+  const shots = seller.portfolio.filter((p) => p.image).slice(0, 3);
   const disabledReason = isOwner ? "هذي خدمتك — العملاء يشوفون زر الطلب هنا." : seller.status !== "approved" ? "المستقل غير موثّق حالياً." : undefined;
 
   return (
@@ -39,7 +43,7 @@ export default async function ServicePage({ params }: { params: Promise<{ id: st
             </Link>
             {seller.status === "approved" && <VerifiedBadge small />}
             <Stars value={s.ratingAvg} count={s.ratingCount} />
-            {s.ordersCount > 0 && <span className="text-stone-500">· {num(s.ordersCount)} طلب</span>}
+            {s.ordersCount > 0 && <span className="text-stone-500">· {arCount(s.ordersCount, COUNT.orders)}</span>}
           </div>
 
           <ServiceCover category={s.category} title={s.title} className="mt-6 h-56 rounded-2xl sm:h-72" />
@@ -104,9 +108,24 @@ export default async function ServicePage({ params }: { params: Promise<{ id: st
             <div className="mt-4 flex flex-wrap gap-2">
               {seller.status === "approved" && <VerifiedBadge />}
               {seller.verificationScore != null && <Badge tone="brand">نتيجة اختبار AI: {num(seller.verificationScore)}/100</Badge>}
-              {seller.freelanceDocNumber && <Badge tone="gray"><span title="أدخلها المستقل ولم يتم التحقق منها آلياً بعد">وثيقة عمل حر (مُعلنة)</span></Badge>}
+              {seller.identityVerified && <Badge tone="green">الهوية موثّقة</Badge>}
               {seller.city && <Badge>📍 {seller.city}</Badge>}
             </div>
+            {facts.length > 0 && (
+              <ul className="mt-4 space-y-1.5 text-sm leading-6">
+                {facts.map((f) => (
+                  <li key={f} className="flex gap-2"><span className="text-brand-600">✓</span>{f}</li>
+                ))}
+              </ul>
+            )}
+            {shots.length > 0 && (
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                {shots.map((p) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={p.title} src={p.image} alt={p.title} loading="lazy" className="aspect-square w-full rounded-lg object-cover ring-1 ring-sand-200" />
+                ))}
+              </div>
+            )}
             <Link href={`/freelancers/${seller.userId}`} className="mt-4 block text-center text-sm font-semibold text-brand-700 hover:underline">
               عرض الملف الكامل
             </Link>

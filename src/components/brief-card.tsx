@@ -37,7 +37,7 @@ export function BriefCard({ b, compact }: { b: StructuredBrief; compact?: boolea
         <List title="وش تستلم" items={b.deliverables} mark="✓" />
         <List title="متى نقول الشغل مضبوط (معايير القبول)" items={b.acceptance} mark="◆" />
       </div>
-      {(b.style?.length || b.colors?.length || b.tone || b.audience) && (
+      {Boolean(b.style?.length || b.colors?.length || b.tone || b.audience) && (
         <div className="flex flex-wrap items-center gap-2 text-sm">
           {b.audience && <Badge>الجمهور: {b.audience}</Badge>}
           {b.tone && <Badge>النبرة: {b.tone}</Badge>}
@@ -57,7 +57,7 @@ export function BriefCard({ b, compact }: { b: StructuredBrief; compact?: boolea
         </div>
       )}
       {!compact && <List title="المطلوب منك توفّره للمستقل" items={b.clientProvides} mark="•" />}
-      {(b.assets?.length || b.references?.length) && (
+      {Boolean(b.assets?.length || b.references?.length) && (
         <div>
           <p className="text-sm font-semibold text-stone-500">الملفات والمراجع</p>
           <ul className="mt-2 flex flex-wrap gap-2 text-sm">

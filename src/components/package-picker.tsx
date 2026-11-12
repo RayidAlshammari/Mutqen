@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import type { ServicePackage } from "@/db/schema";
 import { buttonClass } from "./ui";
-import { cn } from "@/lib/utils";
+import { arCount, cn, COUNT } from "@/lib/utils";
 
 const sarFmt = (n: number) => `${n.toLocaleString("ar-SA")} ر.س`;
 const days = (d: number) => (d === 1 ? "يوم واحد" : d === 2 ? "يومين" : `${d.toLocaleString("ar-SA")} أيام`);
@@ -34,7 +34,7 @@ export function PackagePicker({ serviceId, packages, disabledReason }: { service
         </div>
         <div className="mt-3 flex gap-4 text-sm text-stone-700">
           <span>⏱ التسليم خلال {days(p.deliveryDays)}</span>
-          <span>↻ {p.revisions ? `${p.revisions.toLocaleString("ar-SA")} تعديل` : "بدون تعديلات"}</span>
+          <span>↻ {p.revisions ? arCount(p.revisions, COUNT.revisions) : "بدون تعديلات"}</span>
         </div>
         <ul className="mt-4 space-y-2 text-sm">
           {p.features.map((f) => (

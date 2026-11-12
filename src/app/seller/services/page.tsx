@@ -4,7 +4,7 @@ import { requireRole } from "@/lib/session";
 import { listServicesBySeller, getSellerProfile } from "@/lib/queries";
 import { toggleServiceAction } from "@/app/actions/seller";
 import { CATEGORIES } from "@/lib/constants";
-import { num, sar } from "@/lib/utils";
+import { arCount, COUNT, sar } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "خدماتي" };
@@ -27,7 +27,7 @@ export default async function MyServicesPage() {
               <span className="text-2xl">{CATEGORIES[s.category].icon}</span>
               <div className="min-w-0 flex-1">
                 <Link href={`/services/${s.id}`} className="font-semibold hover:text-brand-700">{s.title}</Link>
-                <p className="text-xs text-stone-500">من {sar(s.minPrice)} · {num(s.ordersCount)} طلب</p>
+                <p className="text-xs text-stone-500">من {sar(s.minPrice)} · {s.ordersCount ? arCount(s.ordersCount, COUNT.orders) : "بدون طلبات بعد"}</p>
               </div>
               <Badge tone={s.active ? "green" : "gray"}>{s.active ? "نشطة" : "موقوفة"}</Badge>
               <form action={toggleServiceAction.bind(null, s.id)}>
