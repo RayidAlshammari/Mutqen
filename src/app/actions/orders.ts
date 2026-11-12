@@ -160,6 +160,8 @@ const staleOr = (e: unknown, message = STALE): ActionState => {
 export async function acceptOrderAction(orderId: string): Promise<void> {
   const { user, o, isSeller } = await loadOrderFor(orderId);
   if (!o || !isSeller) return;
+  const [payout] = await db.select({ iban: sellerProfile.iban }).from(sellerProfile).where(eq(sellerProfile.userId, user.id)).limit(1);
+  if (!payout?.iban) redirect(`/dashboard/settings?need=iban&next=${encodeURIComponent(`/orders/${orderId}`)}`);
   const now = Date.now();
   const moved = await db.transaction(async (tx) => {
     const rows = await tx

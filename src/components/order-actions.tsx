@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ActionState } from "@/app/actions/orders";
 import { Button, FormError, Input, Label, Textarea } from "./ui";
 import { cn } from "@/lib/utils";
+import { UploadField } from "./upload-field";
 
 type BoundAction = (state: ActionState, formData: FormData) => Promise<ActionState>;
 
@@ -26,7 +27,9 @@ export function NoteForm({
   pendingLabel = "…",
   variant = "primary",
   withUrl,
-  urlLabel = "رابط العمل (Google Drive، Figma، GitHub…)",
+  urlLabel = "العمل: ارفع الملف أو حط رابطه",
+  uploads = false,
+  folder = "orders",
 }: {
   action: BoundAction;
   label: string;
@@ -36,6 +39,8 @@ export function NoteForm({
   variant?: "primary" | "secondary" | "danger";
   withUrl?: boolean;
   urlLabel?: string;
+  uploads?: boolean;
+  folder?: string;
 }) {
   const { state, run, pending, ref } = useResettingAction(action);
   return (
@@ -47,7 +52,7 @@ export function NoteForm({
       {withUrl && (
         <div>
           <Label>{urlLabel}</Label>
-          <Input name="url" type="url" dir="ltr" placeholder="https://" required aria-label={urlLabel} />
+          <UploadField name="url" uploads={uploads} folder={folder} required placeholder="https:// (Google Drive، Figma، GitHub…)" />
         </div>
       )}
       <FormError message={state?.error} />

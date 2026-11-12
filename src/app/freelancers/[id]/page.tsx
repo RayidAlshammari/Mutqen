@@ -4,13 +4,16 @@ import { ServiceCard } from "@/components/service-card";
 import { getSeller } from "@/lib/queries";
 import { CATEGORIES } from "@/lib/constants";
 import { num, relativeTime } from "@/lib/utils";
+import { recordLines, sellerRecords } from "@/lib/match";
 
 export const dynamic = "force-dynamic";
 
 export default async function FreelancerPage({ params }: { params: Promise<{ id: string }> }) {
   const data = await getSeller((await params).id);
   if (!data || data.profile.status !== "approved") notFound();
-  const { profile: p, services, reviews, ratingAvg, completed, onTime } = data;
+  const { profile: p, services, reviews, ratingAvg, completed } = data;
+  const record = (await sellerRecords([p.userId])).get(p.userId)!;
+  const facts = recordLines(record);
 
   return (
     <Container className="py-10">
@@ -31,7 +34,8 @@ export default async function FreelancerPage({ params }: { params: Promise<{ id:
           </div>
           <div className="flex flex-wrap gap-2 pb-1">
             {p.city && <Badge>📍 {p.city}</Badge>}
-            {p.freelanceDocNumber && <Badge tone="gray"><span title="أدخلها المستقل ولم يتم التحقق منها آلياً بعد">وثيقة عمل حر (مُعلنة)</span></Badge>}
+            {p.identityVerified && <Badge tone="green">الهوية موثّقة</Badge>}
+            {p.freelanceDocNumber && <Badge tone="gray"><span title="أدخلها المستقل">وثيقة عمل حر (مُعلنة)</span></Badge>}
             {p.categories.map((c) => (
               <Badge key={c} tone="brand">
                 {CATEGORIES[c].icon} {CATEGORIES[c].label}
@@ -50,12 +54,25 @@ export default async function FreelancerPage({ params }: { params: Promise<{ id:
             </div>
             <div>
               <p className="text-xl font-bold">{num(completed)}</p>
-              <p className="text-xs text-stone-500">طلب مكتمل</p>
+              <p className="text-xs text-stone-500">مكتمل</p>
             </div>
             <div>
-              <p className="text-xl font-bold">{completed ? `${num(Math.round((onTime / completed) * 100))}٪` : "—"}</p>
-              <p className="text-xs text-stone-500">في الوقت</p>
+              <p className="text-xl font-bold">{record.onTimeRate !== null ? `${num(Math.round(record.onTimeRate * 100))}٪` : "—"}</p>
+              <p className="text-xs text-stone-500">في الموعد</p>
             </div>
+          </Card>
+          <Card className="p-5">
+            <h2 className="font-bold">سجله على متقن</h2>
+            {facts.length ? (
+              <ul className="mt-3 space-y-1.5 text-sm leading-6">
+                {facts.map((f) => (
+                  <li key={f} className="flex gap-2"><span className="text-brand-600">✓</span>{f}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-sm leading-6 text-stone-600">جديد على متقن. اجتاز الاختبار العملي وراجع الفريق شغله، وما عنده طلبات مكتملة بعد.</p>
+            )}
+            <p className="mt-3 text-xs leading-5 text-stone-500">الأرقام محسوبة من الطلبات الفعلية على المنصة، وما يقدر المستقل يعدّلها.</p>
           </Card>
           <Card className="p-5">
             <h2 className="font-bold">نبذة</h2>
@@ -74,29 +91,35 @@ export default async function FreelancerPage({ params }: { params: Promise<{ id:
               </div>
             )}
           </Card>
-          {p.portfolio.length > 0 && (
-            <Card className="p-5">
-              <h2 className="font-bold">أعمال سابقة</h2>
-              <ul className="mt-3 space-y-2 text-sm">
-                {p.portfolio.map((it) => (
-                  <li key={it.title}>
-                    {it.url ? (
-                      <a href={it.url} target="_blank" rel="noopener noreferrer nofollow" className="font-semibold text-brand-700 hover:underline">
-                        {it.title} ↗
-                      </a>
-                    ) : (
-                      <span className="font-semibold">{it.title}</span>
-                    )}
-                    {it.description && <p className="text-stone-600">{it.description}</p>}
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
         </div>
 
         <div>
-          <h2 className="mb-4 text-lg font-bold text-brand-950">الخدمات ({num(services.length)})</h2>
+          {p.portfolio.length > 0 && (
+            <>
+              <h2 className="mb-4 text-lg font-bold text-brand-950">أعماله</h2>
+              <ul className="mb-10 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {p.portfolio.map((it) => (
+                  <li key={it.title}>
+                    <Card className="overflow-hidden">
+                      {it.image && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={it.image} alt={it.title} loading="lazy" className="aspect-[4/3] w-full object-cover" />
+                      )}
+                      <div className="p-4">
+                        {it.url ? (
+                          <a href={it.url} target="_blank" rel="noopener noreferrer nofollow" className="font-semibold text-brand-700 hover:underline">{it.title} ↗</a>
+                        ) : (
+                          <p className="font-semibold">{it.title}</p>
+                        )}
+                        {it.description && <p className="mt-1 text-sm leading-6 text-stone-600">{it.description}</p>}
+                      </div>
+                    </Card>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <h2 className="mb-4 text-lg font-bold text-brand-950">خدماته ({num(services.length)})</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             {services.map((s) => (
               <ServiceCard key={s.id} {...s} sellerName={p.displayName} sellerStatus={p.status} />

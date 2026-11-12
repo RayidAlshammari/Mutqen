@@ -19,7 +19,7 @@ export function PayoutForm({ payoutName, iban }: { payoutName?: string | null; i
       <div>
         <Label htmlFor="iban">رقم الآيبان</Label>
         <Input id="iban" name="iban" required dir="ltr" placeholder="SA00 0000 0000 0000 0000 0000" defaultValue={iban ?? ""} />
-        <Hint>تتحول أرباحك لهذا الحساب بعد موافقة العميل على التسليم. التحويل الفعلي يتفعّل مع ربط بوابة الدفع.</Hint>
+        <Hint>تتحول أرباحك لهذا الحساب بعد ما يعتمد العميل التسليم. الاسم لازم يطابق اسم صاحب الحساب في البنك.</Hint>
       </div>
       <Saved ok={state?.ok} />
       <FormError message={state?.error} />
@@ -53,7 +53,7 @@ export function BillingForm({ defaults, cities }: { defaults: { companyName?: st
           <Input id="crNumber" name="crNumber" dir="ltr" inputMode="numeric" defaultValue={defaults.crNumber ?? ""} />
         </div>
       </div>
-      <Hint>تظهر هذي البيانات في فواتيرك الضريبية. إصدار الفواتير الإلكترونية ضمن الخطوة القادمة.</Hint>
+      <Hint>تظهر هذي البيانات في فواتيرك.</Hint>
       <Saved ok={state?.ok} />
       <FormError message={state?.error} />
       <Button type="submit" disabled={pending}>{pending ? "جارٍ الحفظ…" : "احفظ بيانات الفاتورة"}</Button>

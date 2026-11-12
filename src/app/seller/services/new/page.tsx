@@ -10,7 +10,7 @@ export const metadata = { title: "خدمة جديدة" };
 export default async function NewServicePage() {
   const user = await requireRole("seller", "/seller/services/new");
   const p = await getSellerProfile(user.id);
-  if (!p) redirect("/seller/onboarding");
+  if (!p || !["pending", "approved"].includes(p.status)) redirect("/seller/onboarding");
   return (
     <Container className="max-w-5xl py-10">
       <PageHeader title="أضف خدمة" subtitle="ثلاث باقات واضحة تسهّل على العميل القرار." />

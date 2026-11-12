@@ -34,8 +34,8 @@ export function useUpload(folder: string) {
  * A URL field for deliveries: upload a file, or paste a link (Drive, Figma, a live site).
  * The form always submits a URL under `name`.
  */
-export function UploadField({ name, uploads, folder, placeholder, required }: { name: string; uploads: boolean; folder: string; placeholder?: string; required?: boolean }) {
-  const [url, setUrl] = useState("");
+export function UploadField({ name, uploads, folder, placeholder, required, defaultValue }: { name: string; uploads: boolean; folder: string; placeholder?: string; required?: boolean; defaultValue?: string }) {
+  const [url, setUrl] = useState(defaultValue ?? "");
   const [fileName, setFileName] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const { send, busy, error } = useUpload(folder);

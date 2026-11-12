@@ -4,7 +4,7 @@ import { OrdersList } from "@/components/orders-list";
 import { requireUser } from "@/lib/session";
 import { listOrdersForUser, getSellerProfile, listServicesBySeller } from "@/lib/queries";
 import { SELLER_STATUS } from "@/lib/constants";
-import { num, sar } from "@/lib/utils";
+import { arCount, COUNT, num, sar } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "لوحة التحكم" };
@@ -27,7 +27,7 @@ export default async function DashboardPage() {
             <div>
               <div className="flex items-center gap-2"><p className="font-bold">حالة التوثيق</p><Badge tone={st.tone}>{st.label}</Badge></div>
               <p className="mt-1 text-sm text-stone-600">
-                {profile?.status === "pending" ? "استلمنا اختبارك، وفريق متقن يراجعه. خدماتك بتظهر للعملاء بعد التوثيق." : profile?.status === "rejected" ? "ما اجتاز ملفك المراجعة. تقدر تعدّل إجابتك وتعيد التقديم." : "كمّل ملفك وحل مهمة التحقق العملية عشان تبدأ تستقبل طلبات."}
+                {profile?.status === "pending" ? "استلمنا اختبارك، وفريق متقن يراجع شغلك. بيوصلك إشعار بالنتيجة، وتقدر تجهّز خدماتك من الحين." : profile?.status === "rejected" ? `ما اجتاز ملفك المراجعة.${profile.reviewNote ? ` ملاحظة الفريق: ${profile.reviewNote}` : ""}` : "كمّل ملفك ونفّذ المهمة العملية عشان تبدأ تستقبل طلبات."}
               </p>
             </div>
             <LinkButton href={profile?.status === "pending" ? "/seller/profile" : "/seller/onboarding"} variant={profile?.status === "pending" ? "secondary" : "accent"}>
@@ -35,11 +35,20 @@ export default async function DashboardPage() {
             </LinkButton>
           </Card>
         )}
+        {profile?.status === "approved" && !profile.iban && (
+          <Card className="mb-6 flex flex-wrap items-center justify-between gap-4 border-r-4 border-saffron-500 p-5">
+            <div>
+              <p className="font-bold">أضف حساب التحويل</p>
+              <p className="mt-1 text-sm text-stone-600">تحتاجه قبل ما تقبل أول طلب، عشان أرباحك تتحوّل له بعد اعتماد العميل.</p>
+            </div>
+            <LinkButton href="/dashboard/settings?need=iban" variant="accent">أضف الآيبان</LinkButton>
+          </Card>
+        )}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Stat label="أرباح محوّلة" value={sar(earned)} />
           <Stat label="أرباح محجوزة (طلبات جارية)" value={sar(held)} />
-          <Stat label="طلبات نشطة" value={num(active.length)} />
-          <Stat label="خدماتي" value={num(services.length)} />
+          <Stat label="بانتظار قبولك" value={num(orders.filter((o) => o.status === "awaiting_acceptance").length)} hint="عندك 24 ساعة لكل طلب" />
+          <Stat label="طلبات نشطة" value={num(active.length)} hint={`${arCount(services.length, COUNT.services)} منشورة`} />
         </div>
         <h2 className="mb-3 mt-10 text-lg font-bold">أحدث الطلبات</h2>
         <OrdersList rows={orders.slice(0, 8)} as="seller" />
@@ -65,7 +74,7 @@ export default async function DashboardPage() {
         empty={
           <Card className="p-10 text-center">
             <p className="text-lg font-semibold">ما عندك طلبات بعد</p>
-            <p className="mt-1 text-sm text-stone-600">اكتب احتياجك للمساعد الذكي وهو يرشح لك المستقل المناسب.</p>
+            <p className="mt-1 text-sm text-stone-600">اكتب وش تحتاج بجملة، ومتقن يكتب الملخص ويرشّح لك المستقل.</p>
             <div className="mt-5 flex justify-center gap-2">
               <LinkButton href="/brief">اطلب أول خدمة</LinkButton>
               <LinkButton href="/services" variant="secondary">تصفح الخدمات</LinkButton>

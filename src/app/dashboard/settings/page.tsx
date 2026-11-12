@@ -7,13 +7,22 @@ import { aiConfigured } from "@/lib/ai";
 import { getBillingProfile, getSellerProfile } from "@/lib/queries";
 import { FEES, SAUDI_CITIES, computeFees } from "@/lib/constants";
 import { num, sar } from "@/lib/utils";
+import { emailEnabled } from "@/lib/notify";
+import { paymentsLive } from "@/lib/payments";
+import { uploadsEnabled } from "@/lib/uploads";
+import { safeNextPath } from "@/lib/validation";
+import { MANAGED_FEE } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "الإعدادات" };
 
 const ROLE = { buyer: "عميل", seller: "مستقل", admin: "مدير" } as const;
 
-export default async function SettingsPage() {
+const Status = ({ on, yes, no }: { on: boolean; yes: string; no: string }) => <Badge tone={on ? "green" : "amber"}>{on ? yes : no}</Badge>;
+
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ need?: string; next?: string }> }) {
+  const sp = await searchParams;
+  const next = safeNextPath(sp.next);
   const user = await requireUser("/dashboard/settings");
   const [seller, billing] = await Promise.all([
     user.role === "seller" ? getSellerProfile(user.id) : Promise.resolve(null),
@@ -34,9 +43,11 @@ export default async function SettingsPage() {
 
       {user.role === "seller" && (
         <>
-          <Card className="space-y-4 p-6">
+          <Card className={`space-y-4 p-6 ${sp.need === "iban" && !seller?.iban ? "ring-2 ring-saffron-500" : ""}`}>
             <h2 className="font-bold">تحويل الأرباح</h2>
+            {sp.need === "iban" && !seller?.iban && <p className="rounded-xl bg-saffron-50 px-3.5 py-2.5 text-sm text-brand-950 ring-1 ring-saffron-200">قبل ما تقبل أول طلب، أضف الحساب اللي تتحول له أرباحك.</p>}
             <PayoutForm payoutName={seller?.payoutName} iban={seller?.iban} />
+            {seller?.iban && next && <LinkButton href={next}>ارجع للطلب واقبله</LinkButton>}
           </Card>
           <Card className="flex flex-wrap items-center justify-between gap-3 p-6">
             <div>
@@ -63,10 +74,17 @@ export default async function SettingsPage() {
             <div className="flex justify-between"><span>عمولة متقن من المستقل</span><strong>{num(FEES.commissionRate * 100)}٪</strong></div>
             <div className="flex justify-between"><span>بعد {num(FEES.repeatAfterOrders)} طلبات مكتملة مع نفس العميل</span><strong>{num(FEES.repeatCommissionRate * 100)}٪</strong></div>
             <div className="flex justify-between"><span>إيراد المنصة من طلب بـ {sar(ex.price)}</span><strong>{sar(ex.platformRevenue)}</strong></div>
-            <div className="flex justify-between"><span>الذكاء الاصطناعي</span><Badge tone={aiConfigured() ? "green" : "gray"}>{aiConfigured() ? `متصل (${process.env.AI_MODEL})` : "وضع بدون اتصال"}</Badge></div>
-            <div className="flex justify-between"><span>التحقق من الجوال (Authentica)</span><Badge tone={authenticaEnabled() ? "green" : "gray"}>{authenticaEnabled() ? "مفعّل" : "غير مفعّل"}</Badge></div>
+            <div className="flex justify-between"><span>رسوم الطلب المُدار</span><strong>{sar(MANAGED_FEE)}</strong></div>
           </div>
-          <p className="text-xs text-stone-500">النسب معرّفة حالياً في الكود (src/lib/constants.ts). تعديلها من هنا ضمن الخطوة القادمة.</p>
+          <h2 className="pt-2 font-bold">حالة الربط مع الخدمات</h2>
+          <div className="grid gap-2 text-sm">
+            <div className="flex justify-between"><span>بوابة الدفع</span><Status on={paymentsLive()} yes="حيّة" no="وضع الاختبار" /></div>
+            <div className="flex justify-between"><span>الذكاء الاصطناعي (الملخص والتقييم)</span><Status on={aiConfigured()} yes="متصل" no="يعمل بالقواعد الاحتياطية" /></div>
+            <div className="flex justify-between"><span>بريد الإشعارات</span><Status on={emailEnabled()} yes="مفعّل" no="الإشعارات داخل الموقع فقط" /></div>
+            <div className="flex justify-between"><span>رفع الملفات</span><Status on={uploadsEnabled()} yes="مفعّل" no="بالروابط فقط" /></div>
+            <div className="flex justify-between"><span>توثيق الجوال برسالة</span><Status on={authenticaEnabled()} yes="مفعّل" no="غير مفعّل" /></div>
+          </div>
+          <p className="text-xs leading-5 text-stone-500">كل خدمة تتفعّل بإضافة مفتاحها في إعدادات الاستضافة، بدون تعديل على الموقع.</p>
         </Card>
       )}
 
@@ -76,7 +94,7 @@ export default async function SettingsPage() {
             <h2 className="font-bold">توثيق الجوال</h2>
             {user.phoneVerified && <Badge tone="green">موثّق <span className="ltr">{user.phone}</span></Badge>}
           </div>
-          <p className="text-sm leading-6 text-stone-600">نوثّق أرقام الجوال برسالة SMS عبر Authentica. والتوثيق عبر نفاذ للمستقلين ضمن الخطوة القادمة.</p>
+          <p className="text-sm leading-6 text-stone-600">نوثّق رقمك برسالة نصية عشان نتواصل معك وقت الحاجة ونحمي حسابك.</p>
           {!user.phoneVerified && <PhoneVerify enabled={authenticaEnabled()} />}
         </Card>
       )}

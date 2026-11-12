@@ -23,8 +23,9 @@ import { reorderBriefAction } from "@/app/actions/brief";
 import { getOrder } from "@/lib/queries";
 import { requireUser } from "@/lib/session";
 import { paymentsLive } from "@/lib/payments";
+import { uploadsEnabled } from "@/lib/uploads";
 import { ACCEPT_HOURS, AUTO_COMPLETE_DAYS, CATEGORIES, ORDER_STATUS } from "@/lib/constants";
-import { formatDate, num, relativeTime, sar } from "@/lib/utils";
+import { daysLabel, formatDate, num, relativeTime, sar } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import type { OrderStatus } from "@/db/schema";
 
@@ -237,7 +238,7 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
                       {e.message && e.type !== "created" && <p className="mt-1 whitespace-pre-line leading-7 text-stone-700">{e.message}</p>}
                       {offer && (
                         <div className="mt-2 flex flex-wrap items-center gap-3">
-                          <Badge tone="brand">{sar(offer.price ?? 0)} · {num(offer.days ?? 0)} يوم</Badge>
+                          <Badge tone="brand">{sar(offer.price ?? 0)} · {daysLabel(offer.days ?? 1)}</Badge>
                           {offer.accepted ? (
                             <Link href={`/orders/${offer.orderId}`} className="font-semibold text-brand-700 hover:underline">
                               تم القبول — افتح الطلب الإضافي ↗
@@ -304,7 +305,7 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
             )}
             <p className="mt-3 text-xs text-stone-500">
               {o.status === "completed" ? "✓ تحوّل المبلغ للمستقل." : o.status === "cancelled" ? "↩︎ رجع المبلغ للعميل." : "🔒 المبلغ محجوز لدى متقن."}
-              {!paymentsLive() && " (وضع الدفع التجريبي)"}
+              {!paymentsLive() && " (بوابة الدفع في وضع الاختبار)"}
             </p>
           </Card>
 
@@ -328,13 +329,13 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
             <Card className="p-5">
               <h2 className="mb-1 font-bold">سلّم العيّنة الأولى</h2>
               <p className="mb-3 text-xs leading-5 text-stone-500">جزء صغير من الشغل (مثلاً منشورين من 12) يوضّح الاتجاه، قبل ما تكمّل الباقي.</p>
-              <NoteForm action={bind(deliverSampleAction)} label="وش في العيّنة؟" placeholder="وش سويت، وليش اخترت هالاتجاه" button="أرسل العيّنة للعميل" pendingLabel="جارٍ الإرسال…" withUrl />
+              <NoteForm action={bind(deliverSampleAction)} label="وش في العيّنة؟" placeholder="وش سويت، وليش اخترت هالاتجاه" button="أرسل العيّنة للعميل" pendingLabel="جارٍ الإرسال…" withUrl uploads={uploadsEnabled()} folder={`orders/${o.id}`} />
             </Card>
           )}
           {isSeller && ((o.status === "in_progress" && o.stage === "full") || o.status === "revision_requested") && (
             <Card className="p-5">
               <h2 className="mb-3 font-bold">{o.status === "revision_requested" ? "سلّم النسخة المعدّلة" : "سلّم الشغل كامل"}</h2>
-              <NoteForm action={bind(deliverOrderAction)} label="رسالة التسليم" placeholder="وش سلّمت، وكيف يتأكد العميل من معايير القبول" button="سلّم الطلب" pendingLabel="جارٍ التسليم…" withUrl />
+              <NoteForm action={bind(deliverOrderAction)} label="رسالة التسليم" placeholder="وش سلّمت، وكيف يتأكد العميل من معايير القبول" button="سلّم الطلب" pendingLabel="جارٍ التسليم…" withUrl uploads={uploadsEnabled()} folder={`orders/${o.id}`} />
             </Card>
           )}
           {isSeller && !closed && o.status !== "awaiting_acceptance" && o.status !== "disputed" && (

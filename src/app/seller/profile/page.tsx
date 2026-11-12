@@ -4,6 +4,7 @@ import { SellerProfileForm } from "@/components/onboarding-form";
 import { requireRole } from "@/lib/session";
 import { getSellerProfile } from "@/lib/queries";
 import { AI_TOOLS, CATEGORIES, SAUDI_CITIES, SELLER_STATUS } from "@/lib/constants";
+import { uploadsEnabled } from "@/lib/uploads";
 import { num } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +40,8 @@ export default async function SellerProfilePage() {
         categories={CATEGORIES}
         tools={AI_TOOLS}
         cities={SAUDI_CITIES}
+        uploads={uploadsEnabled()}
+        userId={user.id}
       />
     </Container>
   );

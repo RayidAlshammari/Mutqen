@@ -7,7 +7,9 @@ import { and, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import type { Category, ServicePackage } from "@/db/schema";
 import { requireRole } from "@/lib/session";
-import { gradeVerification, VERIFICATION_TASKS } from "@/lib/ai";
+import { draftProfileFromCv, gradeVerification, VERIFICATION_TASKS } from "@/lib/ai";
+import { CONDUCT_QUIZ, gradeConduct } from "@/lib/conduct";
+import { notifyAdmins } from "@/lib/notify";
 import { ALL_AI_TOOLS, CATEGORY_KEYS } from "@/lib/constants";
 import { newId } from "@/lib/id";
 import { httpUrl } from "@/lib/validation";
@@ -15,7 +17,7 @@ import { hit, LIMITS } from "@/lib/rate-limit";
 
 const { sellerProfile, service } = schema;
 
-export type SellerState = { error?: string; ok?: boolean; score?: number; feedback?: string; passed?: boolean } | undefined;
+export type SellerState = { error?: string; ok?: boolean; score?: number; feedback?: string; passed?: boolean; conductScore?: number; conductMissed?: string[] } | undefined;
 
 const catEnum = z.enum(CATEGORY_KEYS as [Category, ...Category[]]);
 
@@ -27,8 +29,15 @@ const profileFields = {
   freelanceDocNumber: z.string().trim().max(30).optional(),
   aiTools: z.array(z.string().max(40)).min(1, "اختر أداة واحدة على الأقل").max(15),
   portfolio: z
-    .array(z.object({ title: z.string().trim().min(1).max(80), url: httpUrl("رابط العمل السابق لازم يبدأ بـ https://").optional().or(z.literal("")) }))
-    .max(5)
+    .array(
+      z.object({
+        title: z.string().trim().min(1).max(80),
+        description: z.string().trim().max(200).optional(),
+        url: httpUrl("رابط العمل السابق لازم يبدأ بـ https://").optional().or(z.literal("")),
+        image: z.union([z.literal(""), z.string().regex(/^\/demo\/[\w-]+\.svg$/), httpUrl("رابط صورة العمل لازم يبدأ بـ https://")]).optional(),
+      }),
+    )
+    .max(4)
     .default([]),
 };
 
@@ -36,12 +45,20 @@ const profileOnlySchema = z.object(profileFields);
 const onboardingSchema = z.object({
   ...profileFields,
   verificationCategory: catEnum,
-  verificationAnswer: z.string().trim().min(120, "إجابة المهمة قصيرة؛ اشرح خطواتك بتفصيل (120 حرف على الأقل)").max(6000),
+  verificationAnswer: z.string().trim().min(120, "شرح المهمة قصير؛ اشرح خطواتك بتفصيل (120 حرف على الأقل)").max(6000),
+  verificationUrl: httpUrl("ارفع ناتج المهمة أو حط رابطه. نراجع الشغل نفسه مو بس الشرح."),
+  nationalId: z.string().trim().regex(/^[12]\d{9}$/, "رقم الهوية أو الإقامة 10 أرقام ويبدأ بـ 1 أو 2"),
 });
 
 function readProfile(formData: FormData) {
-  const portfolio = [0, 1, 2]
-    .map((i) => ({ title: String(formData.get(`pf_title_${i}`) ?? ""), url: String(formData.get(`pf_url_${i}`) ?? "") }))
+  const portfolio = [0, 1, 2, 3]
+    .map((i) => ({
+      title: String(formData.get(`pf_title_${i}`) ?? ""),
+      description: String(formData.get(`pf_desc_${i}`) ?? "") || undefined,
+      url: String(formData.get(`pf_url_${i}`) ?? ""),
+      // Seeded sample images are site-relative; anything a freelancer enters must be a full link.
+      image: String(formData.get(`pf_image_${i}`) ?? ""),
+    }))
     .filter((p) => p.title.trim());
   const extraTools = String(formData.get("otherTools") ?? "")
     .split(/[,،]/)
@@ -66,7 +83,7 @@ function profileValues(d: z.infer<typeof profileOnlySchema>) {
     city: d.city ?? null,
     freelanceDocNumber: d.freelanceDocNumber ?? null,
     aiTools: Array.from(new Set(d.aiTools)),
-    portfolio: d.portfolio.map((p) => ({ title: p.title, url: p.url || undefined })),
+    portfolio: d.portfolio.map((p) => ({ title: p.title, description: p.description || undefined, url: p.url || undefined, image: p.image || undefined })),
   };
 }
 
@@ -80,9 +97,20 @@ export async function submitOnboardingAction(_: SellerState, formData: FormData)
     ...readProfile(formData),
     verificationCategory: formData.get("verificationCategory"),
     verificationAnswer: formData.get("verificationAnswer"),
+    verificationUrl: formData.get("verificationUrl"),
+    nationalId: formData.get("nationalId"),
   });
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   const d = parsed.data;
+  if (!user.phoneVerified && process.env.AUTHENTICA_API_KEY) return { error: "وثّق رقم جوالك أول (خطوة الهوية)." };
+
+  const conductAnswers: Record<string, number> = {};
+  for (const q of CONDUCT_QUIZ) {
+    const v = formData.get(`conduct_${q.id}`);
+    if (v === null || v === "") return { error: "جاوب على كل أسئلة التعامل مع العملاء." };
+    conductAnswers[q.id] = Number(v);
+  }
+  const conduct = gradeConduct(conductAnswers);
 
   const rl = await hit(`verify:${user.id}`, LIMITS.verification.limit, LIMITS.verification.window);
   if (!rl.ok) return { error: "استنفدت محاولات التقييم المسموحة هذي الساعة. راجع إجابتك وجرّب بعد شوي." };
@@ -95,18 +123,37 @@ export async function submitOnboardingAction(_: SellerState, formData: FormData)
     verificationCategory: d.verificationCategory,
     verificationTask: VERIFICATION_TASKS[d.verificationCategory],
     verificationAnswer: d.verificationAnswer,
+    verificationUrl: d.verificationUrl,
+    verificationStartedAt: existing[0]?.verificationStartedAt ?? new Date(),
     verificationScore: grade.score,
     verificationFeedback: grade.feedback,
-    status: grade.passed ? "pending" : "draft",
+    nationalId: d.nationalId,
+    conductScore: conduct.score,
+    reviewNote: null,
+    status: grade.passed && conduct.passed ? "pending" : "draft",
   };
   await db
     .insert(sellerProfile)
     .values({ userId: user.id, ...values })
     .onConflictDoUpdate({ target: sellerProfile.userId, set: values });
 
+  if (values.status === "pending") await notifyAdmins({ title: "مستقل بانتظار التوثيق", body: d.displayName, href: "/admin" });
   revalidatePath("/seller/onboarding");
   revalidatePath("/dashboard");
-  return { ok: true, score: grade.score, feedback: grade.feedback, passed: grade.passed };
+  return { ok: true, score: grade.score, feedback: grade.feedback, passed: grade.passed && conduct.passed, conductScore: conduct.score, conductMissed: conduct.missed };
+}
+
+export type DraftState = { error?: string; headline?: string; bio?: string; city?: string; tools?: string[] } | undefined;
+
+/** Reads a pasted CV and proposes the profile fields. Nothing is saved until the freelancer submits. */
+export async function draftProfileAction(text: string): Promise<DraftState> {
+  const user = await requireRole("seller", "/seller/onboarding");
+  const cv = text.trim();
+  if (cv.length < 80) return { error: "الصق سيرتك أو نبذتك (80 حرف على الأقل)." };
+  const rl = await hit(`cv:${user.id}`, 5, 3600);
+  if (!rl.ok) return { error: "جرّبت كثير هذي الساعة. عبّي الحقول يدوياً أو حاول بعدين." };
+  const d = await draftProfileFromCv(cv);
+  return { headline: d.headline, bio: d.bio, city: d.city, tools: d.tools };
 }
 
 /** Edit the public profile after onboarding. Does not touch verification or status. */
@@ -147,8 +194,9 @@ const TIERS = [
 
 export async function createServiceAction(_: SellerState, formData: FormData): Promise<SellerState> {
   const user = await requireRole("seller", "/seller/services/new");
-  const profile = await db.select({ categories: sellerProfile.categories }).from(sellerProfile).where(eq(sellerProfile.userId, user.id)).limit(1);
-  if (!profile.length) return { error: "كمّل ملفك كمستقل أولاً." };
+  const profile = await db.select({ categories: sellerProfile.categories, status: sellerProfile.status }).from(sellerProfile).where(eq(sellerProfile.userId, user.id)).limit(1);
+  // Only freelancers who passed the test can publish. A profile that failed or was rejected cannot.
+  if (!profile.length || !["pending", "approved"].includes(profile[0].status)) return { error: "اجتز اختبار التوثيق أول، وبعدها تقدر تضيف خدماتك." };
 
   const base = serviceSchema.safeParse({
     title: formData.get("title"),
