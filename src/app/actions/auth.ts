@@ -7,6 +7,8 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db, schema } from "@/db";
 import { safeNextPath as safeNext } from "@/lib/validation";
+import { clientIp, hit } from "@/lib/rate-limit";
+import { emailEnabled } from "@/lib/notify";
 
 export type FormState = { error?: string } | undefined;
 
@@ -63,4 +65,35 @@ export async function signInAction(_: FormState, formData: FormData): Promise<Fo
 export async function signOutAction() {
   await auth.api.signOut({ headers: await headers() });
   redirect("/");
+}
+
+/* ───────────── Forgotten password ───────────── */
+
+export type ResetState = { error?: string; sent?: boolean; done?: boolean } | undefined;
+
+export async function forgotPasswordAction(_: ResetState, formData: FormData): Promise<ResetState> {
+  const email = z.string().trim().toLowerCase().email().safeParse(formData.get("email"));
+  if (!email.success) return { error: "البريد غير صحيح" };
+  if (!emailEnabled()) return { error: "استعادة كلمة المرور بالبريد غير متاحة حالياً. تواصل مع فريق متقن." };
+  const rl = await hit(`reset:${await clientIp()}`, 5, 3600);
+  if (!rl.ok) return { error: "محاولات كثيرة. جرّب بعد ساعة." };
+  try {
+    await auth.api.requestPasswordReset({ body: { email: email.data }, headers: await headers() });
+  } catch {
+    // Same answer whether or not the address exists.
+  }
+  return { sent: true };
+}
+
+export async function resetPasswordAction(_: ResetState, formData: FormData): Promise<ResetState> {
+  const token = String(formData.get("token") ?? "");
+  const password = String(formData.get("password") ?? "");
+  if (password.length < 8) return { error: "كلمة المرور 8 أحرف على الأقل" };
+  if (password !== String(formData.get("confirm") ?? "")) return { error: "كلمتا المرور غير متطابقتين" };
+  try {
+    await auth.api.resetPassword({ body: { newPassword: password, token }, headers: await headers() });
+  } catch {
+    return { error: "الرابط منتهي أو غير صالح. اطلب رابط جديد." };
+  }
+  return { done: true };
 }

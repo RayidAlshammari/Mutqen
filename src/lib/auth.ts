@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 import { db, schema } from "@/db";
+import { sendEmail } from "./notify";
 
 export const auth = betterAuth({
   appName: "متقن",
@@ -20,6 +21,12 @@ export const auth = betterAuth({
     enabled: true,
     minPasswordLength: 8,
     autoSignIn: true,
+    resetPasswordTokenExpiresIn: 60 * 30,
+    revokeSessionsOnPasswordReset: true,
+    // The link opens our own page, which submits the token with the new password.
+    sendResetPassword: async ({ user, token }) => {
+      await sendEmail(user.email, "إعادة تعيين كلمة المرور", "طلبت إعادة تعيين كلمة المرور. الرابط صالح لمدة 30 دقيقة. إذا ما طلبتها، تجاهل هذي الرسالة.", `/reset-password?token=${encodeURIComponent(token)}`);
+    },
   },
   user: {
     additionalFields: {

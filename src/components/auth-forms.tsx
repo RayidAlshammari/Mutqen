@@ -2,7 +2,8 @@
 
 import { useFormAction } from "./use-form-action";
 import { useState } from "react";
-import { signInAction, signUpAction } from "@/app/actions/auth";
+import Link from "next/link";
+import { forgotPasswordAction, resetPasswordAction, signInAction, signUpAction } from "@/app/actions/auth";
 import { Button, Input, Label, FormError } from "./ui";
 import { cn } from "@/lib/utils";
 
@@ -16,7 +17,12 @@ export function SignInForm({ next }: { next?: string }) {
         <Input id="email" name="email" type="email" autoComplete="email" required dir="ltr" />
       </div>
       <div>
-        <Label htmlFor="password">كلمة المرور</Label>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="password">كلمة المرور</Label>
+          <Link href="/forgot-password" className="mb-1.5 text-xs font-semibold text-brand-700 hover:underline">
+            نسيتها؟
+          </Link>
+        </div>
         <Input id="password" name="password" type="password" autoComplete="current-password" required dir="ltr" />
       </div>
       <FormError message={state?.error} />
@@ -76,6 +82,64 @@ export function SignUpForm({ next, defaultRole = "buyer" }: { next?: string; def
       <FormError message={state?.error} />
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? "جارٍ إنشاء الحساب…" : role === "seller" ? "أنشئ حسابي وابدأ التوثيق" : "أنشئ حسابي"}
+      </Button>
+      <p className="text-center text-xs leading-5 text-stone-500">
+        بإنشاء الحساب أنت توافق على{" "}
+        <Link href="/terms" target="_blank" className="font-semibold text-brand-700 hover:underline">
+          الشروط
+        </Link>{" "}
+        و
+        <Link href="/privacy" target="_blank" className="font-semibold text-brand-700 hover:underline">
+          الخصوصية
+        </Link>
+        .
+      </p>
+    </form>
+  );
+}
+
+export function ForgotPasswordForm() {
+  const [state, action, pending] = useFormAction(forgotPasswordAction, undefined);
+  if (state?.sent) return <p className="rounded-xl bg-emerald-50 px-3.5 py-3 text-sm leading-7 text-emerald-900 ring-1 ring-emerald-200">إذا البريد مسجّل عندنا، وصلك رابط إعادة التعيين. الرابط صالح 30 دقيقة.</p>;
+  return (
+    <form onSubmit={action} className="space-y-4">
+      <div>
+        <Label htmlFor="email">البريد الإلكتروني</Label>
+        <Input id="email" name="email" type="email" autoComplete="email" required dir="ltr" />
+      </div>
+      <FormError message={state?.error} />
+      <Button type="submit" className="w-full" disabled={pending}>
+        {pending ? "يرسل…" : "أرسل رابط إعادة التعيين"}
+      </Button>
+    </form>
+  );
+}
+
+export function ResetPasswordForm({ token }: { token: string }) {
+  const [state, action, pending] = useFormAction(resetPasswordAction, undefined);
+  if (state?.done)
+    return (
+      <div className="space-y-4">
+        <p className="rounded-xl bg-emerald-50 px-3.5 py-3 text-sm text-emerald-900 ring-1 ring-emerald-200">تم تغيير كلمة المرور ✓</p>
+        <Link href="/login" className="block text-center font-semibold text-brand-700 hover:underline">
+          سجّل دخولك
+        </Link>
+      </div>
+    );
+  return (
+    <form onSubmit={action} className="space-y-4">
+      <input type="hidden" name="token" value={token} />
+      <div>
+        <Label htmlFor="password">كلمة المرور الجديدة</Label>
+        <Input id="password" name="password" type="password" autoComplete="new-password" minLength={8} required dir="ltr" />
+      </div>
+      <div>
+        <Label htmlFor="confirm">أعد كتابتها</Label>
+        <Input id="confirm" name="confirm" type="password" autoComplete="new-password" minLength={8} required dir="ltr" />
+      </div>
+      <FormError message={state?.error} />
+      <Button type="submit" className="w-full" disabled={pending}>
+        {pending ? "يحفظ…" : "غيّر كلمة المرور"}
       </Button>
     </form>
   );
