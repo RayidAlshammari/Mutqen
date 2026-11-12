@@ -1,16 +1,17 @@
 import { randomBytes } from "node:crypto";
 /**
- * Demo data for the MVP. Usage:
+ * Sample data for a demo or staging environment. A real launch starts from an empty database
+ * (run the migrations only). Usage:
  *   npm run db:seed            (refuses if data exists)
- *   npm run db:seed -- --reset (wipes all tables first)
+ *   npm run db:seed -- --reset (wipes all tables first; on a hosted database also needs --wipe-hosted)
  * All people and businesses here are fictional.
  */
 import "dotenv/config";
 import { sql } from "drizzle-orm";
 import { hashPassword } from "better-auth/crypto";
 import { db, schema } from "../src/db";
-import type { Category, ServicePackage, OrderStatus } from "../src/db/schema";
-import { computeFees } from "../src/lib/constants";
+import type { Category, OrderStage, OrderStatus, PortfolioItem, ServicePackage, StructuredBrief } from "../src/db/schema";
+import { computeFees, MANAGED_FEE } from "../src/lib/constants";
 import { newId } from "../src/lib/id";
 
 // Passwords never live in the repository. Against a real database they must come from the
@@ -22,9 +23,16 @@ const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? (hosted ? randomPasswo
 const DAY = 24 * 3600 * 1000;
 const ago = (days: number, hours = 0) => new Date(Date.now() - days * DAY - hours * 3600 * 1000);
 
-let seedN = 7;
-const rand = () => ((seedN = (seedN * 16807) % 2147483647) - 1) / 2147483646;
-const pick = <T,>(a: T[]) => a[Math.floor(rand() * a.length)];
+const HOUR = 3600 * 1000;
+
+/** Fictional but checksum-valid Saudi IBANs, so payout screens behave as they will in production. */
+function demoIban(n: number) {
+  const bban = "80" + String(100000000000000000 + n * 7919).padStart(18, "0");
+  const numeric = (bban + "SA00").replace(/[A-Z]/g, (c) => String(c.charCodeAt(0) - 55));
+  let rem = 0;
+  for (const ch of numeric) rem = (rem * 10 + Number(ch)) % 97;
+  return `SA${String(98 - rem).padStart(2, "0")}${bban}`;
+}
 
 type SellerSeed = {
   key: string;
@@ -37,6 +45,7 @@ type SellerSeed = {
   tools: string[];
   doc?: string;
   score: number;
+  portfolio?: PortfolioItem[];
   services: { title: string; description: string; tools: string[]; packages: [number, number, number]; days: [number, number, number]; features: [string[], string[], string[]] }[];
 };
 
@@ -260,6 +269,32 @@ const SELLERS: SellerSeed[] = [
   },
 ];
 
+
+const PORTFOLIO: Record<string, PortfolioItem[]> = {
+  noura: [
+    { title: "حملة افتتاح مقهى مختص", description: "12 منشور بلهجة نجدية خفيفة قبل الافتتاح بأسبوعين.", image: "/demo/social-post-1.svg" },
+    { title: "محتوى موسم العيد لمحل حلويات", description: "تقويم نشر 3 أسابيع مع عروض الطلب المسبق.", image: "/demo/social-post-2.svg" },
+  ],
+  faisal: [{ title: "مقالات مدونة متجر عناية", description: "6 مقالات مبنية على بحث كلمات مفتاحية.", image: "/demo/article.svg" }],
+  reem: [{ title: "تعريب تطبيق توصيل", description: "واجهات التطبيق كاملة مع قاموس مصطلحات.", image: "/demo/translation.svg" }],
+  abdulaziz: [
+    { title: "ريلز إطلاق عطر", description: "ستوري بورد ثم فيديو 15 ثانية بثلاثة مقاسات.", image: "/demo/reel-storyboard.svg" },
+    { title: "صورة منتج للإعلان", description: "مشهد غروب مولّد ومدموج مع لقطة المنتج.", image: "/demo/product-shot.svg" },
+  ],
+  lama: [
+    { title: "شعار مقهى مختص", description: "شعار مرسوم يدوياً بعد استكشاف الاتجاهات بالذكاء الاصطناعي.", image: "/demo/logo-cafe.svg" },
+    { title: "لوحة ألوان وخطوط", description: "هوية متجر حلويات مع قوالب سوشال.", image: "/demo/identity-palette.svg" },
+    { title: "صور منتجات بدون استوديو", description: "15 صورة لثلاثة عطور.", image: "/demo/product-shot.svg" },
+  ],
+  turki: [{ title: "موشن يشرح تطبيق", description: "45 ثانية مع تعليق صوتي.", image: "/demo/motion-frames.svg" }],
+  omar: [
+    { title: "بوت واتساب لمتجر", description: "يجاوب من ملف الأسئلة الشائعة ويحوّل للموظف.", image: "/demo/chatbot.svg" },
+    { title: "أتمتة طلبات المتجر", description: "من المتجر إلى واتساب وجدول المتابعة.", image: "/demo/automation.svg" },
+  ],
+  sara: [{ title: "صفحة هبوط لدورة تدريبية", description: "صفحة عربية سريعة مع نموذج تسجيل.", image: "/demo/landing-page.svg" }],
+  khaled: [{ title: "لوحة مبيعات يومية", description: "تقارير حيّة من ملفات الإكسل.", image: "/demo/dashboard.svg" }],
+};
+
 const PENDING: SellerSeed = {
   key: "hind",
   name: "هند الغامدي",
@@ -274,39 +309,233 @@ const PENDING: SellerSeed = {
 };
 
 const BUYERS = [
-  { name: "مقهى رَوْق", email: "buyer@mutqen.demo" },
-  { name: "متجر عبق للعطور", email: "abaq@mutqen.demo" },
-  { name: "سلمان الرشيدي", email: "salman@mutqen.demo" },
-  { name: "وكالة نَبْض للتسويق", email: "nabd@mutqen.demo" },
-  { name: "عيادات رِفق", email: "rifq@mutqen.demo" },
-  { name: "منيرة الحمدان", email: "munira@mutqen.demo" },
-];
+  { key: "rawq", name: "مقهى رَوْق", email: "buyer@mutqen.demo" },
+  { key: "deera", name: "حلويات الديرة", email: "deera@mutqen.demo" },
+  { key: "abaq", name: "متجر عبق للعطور", email: "abaq@mutqen.demo" },
+  { key: "salman", name: "سلمان الرشيدي", email: "salman@mutqen.demo" },
+  { key: "nabd", name: "وكالة نَبْض للتسويق", email: "nabd@mutqen.demo" },
+  { key: "munira", name: "منيرة الحمدان", email: "munira@mutqen.demo" },
+] as const;
+type BuyerKey = (typeof BUYERS)[number]["key"];
 
-const BRIEFS: Record<Category, string[]> = {
-  content: [
-    "نبي محتوى لإطلاق فرعنا الجديد في حائل، الجمهور شباب وعوائل، والأسلوب خفيف وقريب.",
-    "أبي مقالات عن العناية بالبشرة لمدونة المتجر، مع التركيز على الكلمات اللي يبحث عنها الناس في السعودية.",
-    "تعريب صفحات التطبيق قبل الإطلاق، أبيها عربية طبيعية مو ترجمة حرفية.",
-  ],
-  media: [
-    "فيديو ريلز لعطرنا الجديد 'سدو'، نبي إحساس فخم وتراثي.",
-    "صور منتجات لـ 3 عطور بخلفيات صحراوية وقت الغروب.",
-    "فيديو يشرح تطبيقنا للعيادات في أقل من دقيقة.",
-  ],
-  code: [
-    "شات بوت واتساب يجاوب عن المواعيد والأسعار من ملف عندنا، ويحول للموظف إذا ما عرف.",
-    "صفحة هبوط لإطلاق تطبيق توصيل قهوة، فيها تسجيل مبكر.",
-    "أتمتة توصل طلبات المتجر لقروب واتساب وتسجلها في جدول.",
-  ],
+/** Briefs as the guided builder produces them: deliverables plus acceptance criteria. */
+const BRIEF_BANK: Record<string, { input: string; b: StructuredBrief }> = {
+  cafeLaunch: {
+    input: "أبي محتوى انستقرام لافتتاح فرعنا الجديد في حائل",
+    b: {
+      title: "محتوى انستقرام لافتتاح فرع مقهى رَوْق في حائل",
+      category: "content",
+      goal: "مقهى مختص يفتح فرعه الثاني في حائل. نبي الناس تعرف موعد الافتتاح وتجي أول أسبوع.",
+      deliverables: ["12 منشور انستقرام مع الكابشن والهاشتاقات", "4 ستوريات للعد التنازلي", "تقويم نشر لأسبوعين"],
+      acceptance: ["العدد 12 منشور و4 ستوريات", "اللهجة نجدية خفيفة بدون فصحى ثقيلة", "كل منشور يذكر موعد الافتتاح أو الموقع", "خالٍ من الأخطاء الإملائية"],
+      clientProvides: ["الشعار وصور المكان", "المنيو والأسعار"],
+      audience: "شباب وعائلات في حائل",
+      tone: "دافئة وقريبة، نجدية خفيفة",
+      style: ["عصري", "هادئ"],
+      colors: ["ترابي دافئ"],
+      answers: [
+        { q: "وش نشاطك، ومين عملاؤك؟", a: "مقهى مختص في حائل، عملاؤنا شباب وعائلات" },
+        { q: "وش تبي المحتوى يحقق؟", a: "حماس قبل افتتاح أو إطلاق" },
+        { q: "كم قطعة تحتاج، ولأي منصة؟", a: "12 منشور انستقرام + 4 ستوري" },
+      ],
+      timeline: "3 أيام",
+    },
+  },
+  sweetsEid: {
+    input: "أبي منشورات لمحل الحلويات قبل العيد",
+    b: {
+      title: "محتوى موسم العيد لحلويات الديرة",
+      category: "content",
+      goal: "محل حلويات في حائل يبي يرفع الطلب المسبق قبل العيد بثلاثة أسابيع.",
+      deliverables: ["12 منشور انستقرام مع الكابشن", "3 نصوص لعروض الطلب المسبق", "قائمة هاشتاقات محلية"],
+      acceptance: ["كل منشور فيه دعوة واضحة للطلب المسبق", "ذكر آخر موعد للطلب في 4 منشورات على الأقل", "اللهجة سعودية بيضاء", "بدون مبالغات أو ادعاءات صحية"],
+      clientProvides: ["قائمة الأصناف والأسعار", "صور الحلويات"],
+      audience: "عائلات حائل",
+      tone: "سعودية بيضاء ومرحة",
+      timeline: "3 أيام",
+    },
+  },
+  blogSeo: {
+    input: "أبي مقالات لمدونة المتجر عن العطور",
+    b: {
+      title: "3 مقالات SEO لمدونة متجر عبق للعطور",
+      category: "content",
+      goal: "متجر عطور إلكتروني يبي زيارات من البحث لمدونته.",
+      deliverables: ["3 مقالات، كل مقال 1500 كلمة", "وصف ميتا لكل مقال", "قائمة الكلمات المفتاحية المستخدمة"],
+      acceptance: ["كل مقال 1400 كلمة على الأقل", "الكلمة المفتاحية في العنوان وأول فقرة", "مصادر المعلومات مذكورة", "فصحى مبسطة بدون أخطاء"],
+      clientProvides: ["رابط المتجر", "المنتجات اللي نبي نركز عليها"],
+      tone: "فصحى مبسطة",
+      timeline: "4 أيام",
+    },
+  },
+  appArabic: {
+    input: "أبي تعريب صفحات التطبيق قبل الإطلاق",
+    b: {
+      title: "تعريب واجهات تطبيق توصيل (3000 كلمة)",
+      category: "content",
+      goal: "تطبيق توصيل يطلق في السعودية ويحتاج واجهات عربية طبيعية.",
+      deliverables: ["ملف النصوص معرّب كامل", "قاموس مصطلحات ثابت للتطبيق"],
+      acceptance: ["كل نص في الملف له مقابل عربي", "المصطلح الواحد له ترجمة واحدة في كل الواجهات", "الأزرار ما تتجاوز 3 كلمات"],
+      clientProvides: ["ملف النصوص الإنجليزي", "صور الشاشات"],
+      timeline: "3 أيام",
+    },
+  },
+  perfumeReel: {
+    input: "أبي فيديو ريلز لعطرنا الجديد سدو",
+    b: {
+      title: "ريلز إعلاني 30 ثانية لعطر «سدو»",
+      category: "media",
+      goal: "متجر عطور يطلق عطر جديد ويبي فيديو يوصل إحساس فخم وتراثي.",
+      deliverables: ["فيديو 30 ثانية بمقاس 9:16", "نسختين إضافيتين 1:1 و16:9", "تعليق صوتي سعودي"],
+      acceptance: ["المدة بين 28 و32 ثانية", "اسم العطر يظهر مكتوباً في آخر 5 ثواني", "الموسيقى مرخصة للاستخدام التجاري", "التعليق الصوتي واضح وبدون أخطاء نطق"],
+      clientProvides: ["صور وفيديو للعبوة", "الشعار"],
+      style: ["كلاسيكي", "جريء"],
+      colors: ["أسود وذهبي"],
+      timeline: "3 أيام",
+    },
+  },
+  cafeLogo: {
+    input: "أبي شعار وهوية لمقهى مختص",
+    b: {
+      title: "شعار وهوية بصرية لمقهى رَوْق",
+      category: "media",
+      goal: "مقهى مختص في حائل يحتاج شعار وألوان وخطوط قبل افتتاح الفرع الثاني.",
+      deliverables: ["شعار بصيغ SVG و PNG", "لوحة ألوان وخطوط", "5 قوالب سوشال"],
+      acceptance: ["الشعار يُقرأ بوضوح بحجم 2 سم", "الملفات المصدرية مسلّمة", "القوالب بمقاس 1080×1080", "الألوان من اللوحة المعتمدة فقط"],
+      clientProvides: ["اسم المقهى بالعربي والإنجليزي", "صور للمكان"],
+      style: ["عصري", "بسيط"],
+      colors: ["ترابي دافئ"],
+      timeline: "5 أيام",
+    },
+  },
+  productPhotos: {
+    input: "أبي صور منتجات لثلاثة عطور",
+    b: {
+      title: "15 صورة منتجات لثلاثة عطور بخلفيات صحراوية",
+      category: "media",
+      goal: "متجر عطور يحتاج صور احترافية للمتجر والإعلانات بدون جلسة تصوير.",
+      deliverables: ["15 صورة (5 لكل عطر)", "مقاسات المتجر والسوشال"],
+      acceptance: ["العبوة والملصق مطابقين للمنتج الحقيقي", "5 صور لكل عطر", "دقة لا تقل عن 2000 بكسل"],
+      clientProvides: ["صورة واضحة لكل عبوة بالجوال"],
+      colors: ["ترابي دافئ"],
+      timeline: "يومين",
+    },
+  },
+  appMotion: {
+    input: "أبي فيديو يشرح تطبيقنا في أقل من دقيقة",
+    b: {
+      title: "فيديو موشن 45 ثانية يشرح تطبيق حجز ملاعب",
+      category: "media",
+      goal: "تطبيق حجز ملاعب يبي فيديو يشرح الفكرة لصفحة المتجر والإعلانات.",
+      deliverables: ["فيديو موشن 45 ثانية", "تعليق صوتي", "نسخة بدون صوت مع ترجمة"],
+      acceptance: ["المدة بين 40 و50 ثانية", "يشرح ثلاث خطوات: ابحث، احجز، ادفع", "ألوان التطبيق مستخدمة"],
+      clientProvides: ["الشعار وألوان التطبيق", "صور الشاشات"],
+      timeline: "5 أيام",
+    },
+  },
+  waBot: {
+    input: "أبي شات بوت واتساب يرد على العملاء",
+    b: {
+      title: "شات بوت واتساب يجاوب عن الطلبات والأسعار",
+      category: "code",
+      goal: "متجر حلويات يستقبل أسئلة متكررة على الواتساب ويبي بوت يجاوب من ملف عنده.",
+      deliverables: ["بوت واتساب يجاوب من ملف الأسئلة (حتى 50 سؤال)", "تحويل للموظف إذا ما لقى جواب", "شرح مكتوب لطريقة تحديث الملف"],
+      acceptance: ["يجاوب صح على 45 من 50 سؤال اختبار", "ما يخترع أسعار أو معلومات خارج الملف", "يحوّل للموظف خلال رسالتين إذا ما عرف"],
+      clientProvides: ["ملف الأسئلة والأجوبة", "رقم واتساب أعمال"],
+      timeline: "4 أيام",
+    },
+  },
+  landing: {
+    input: "أبي صفحة هبوط لدورة تدريبية",
+    b: {
+      title: "صفحة هبوط لدورة تدريبية مع نموذج تسجيل",
+      category: "code",
+      goal: "مدرب مستقل يطلق دورة ويبي صفحة تجمع التسجيلات.",
+      deliverables: ["صفحة هبوط عربية متجاوبة", "نموذج تسجيل مربوط بجدول", "ربط بنطاق خاص"],
+      acceptance: ["تفتح على الجوال في أقل من 3 ثواني", "التسجيل يوصل للجدول", "النصوص كلها عربية وبدون أخطاء"],
+      clientProvides: ["محتوى الدورة وصورة المدرب", "النطاق"],
+      style: ["عصري", "بسيط"],
+      colors: ["أزرق وهادئ"],
+      timeline: "3 أيام",
+    },
+  },
+  automation: {
+    input: "أبي طلبات المتجر توصل لقروب الواتساب",
+    b: {
+      title: "أتمتة طلبات المتجر إلى واتساب وجدول متابعة",
+      category: "code",
+      goal: "متجر عطور على سلة يبي كل طلب جديد يوصل لقروب الفريق ويتسجل في جدول.",
+      deliverables: ["أتمتة n8n تشتغل على كل طلب جديد", "جدول متابعة", "توثيق مختصر"],
+      acceptance: ["الطلب يوصل للقروب خلال دقيقة", "كل طلب يتسجل مرة وحدة بدون تكرار", "تنبيه إذا تعطلت الأتمتة"],
+      clientProvides: ["صلاحية الربط مع سلة", "رقم الواتساب"],
+      timeline: "4 أيام",
+    },
+  },
+  dashboard: {
+    input: "أبي داشبورد لمبيعات الفروع",
+    b: {
+      title: "لوحة مبيعات يومية من ملفات الإكسل",
+      category: "code",
+      goal: "وكالة تسويق تتابع أداء عملائها من ملفات إكسل متفرقة وتبي لوحة وحدة.",
+      deliverables: ["لوحة بخمسة مؤشرات", "تحديث تلقائي يومي", "صلاحيات لمستخدمين"],
+      acceptance: ["الأرقام تطابق ملف الإكسل", "تتحدث يومياً بدون تدخل", "تفتح على الجوال"],
+      clientProvides: ["ملفات الإكسل الحالية"],
+      timeline: "7 أيام",
+    },
+  },
+};
+type BriefKey = keyof typeof BRIEF_BANK;
+
+type Scenario = {
+  buyer: BuyerKey;
+  seller: string;
+  /** index of the freelancer's service */
+  svc?: number;
+  tier?: 0 | 1 | 2;
+  brief: BriefKey;
+  status: OrderStatus;
+  stage?: OrderStage;
+  /** when the client paid */
+  daysAgo: number;
+  hoursAgo?: number;
+  acceptHours?: number;
+  /** delivery time as a fraction of the agreed days; above 1 means late */
+  pace?: number;
+  review?: [number, string];
+  managed?: boolean;
 };
 
-const COMMENTS = [
-  "شغل مرتب وسريع، والتعديل كان في نفس اليوم.",
-  "فهم المطلوب من أول مرة، والنتيجة أحسن من توقعي.",
-  "ممتاز، بس أتمنى التواصل يكون أسرع شوي.",
-  "سلّم قبل الموعد، وأكيد بنرجع له.",
-  "جودة عالية والأسلوب مناسب لجمهورنا بالضبط.",
-  "تعامل راقي، ووضح لي كيف استخدم الذكاء الاصطناعي في الشغل.",
+// Finished work first (it builds each freelancer's record), then one order in every live state.
+const SCENARIOS: Scenario[] = [
+  { buyer: "rawq", seller: "noura", brief: "cafeLaunch", status: "completed", daysAgo: 41, acceptHours: 2, pace: 0.8, review: [5, "المحتوى طلع بلهجتنا فعلاً، والعيّنة الأولى وفّرت علينا تعديلات كثيرة."] },
+  { buyer: "rawq", seller: "noura", svc: 1, brief: "cafeLaunch", status: "completed", daysAgo: 30, acceptHours: 1, pace: 0.7, review: [5, "ثلاث بدايات للسكربت وكلها تنفع. اخترنا الثانية."] },
+  { buyer: "rawq", seller: "noura", brief: "cafeLaunch", status: "completed", daysAgo: 16, acceptHours: 3, pace: 0.9, review: [4, "شغل مرتب. منشورين احتاجوا تعديل في النبرة وعدّلتهم في نفس اليوم."] },
+  { buyer: "deera", seller: "noura", brief: "sweetsEid", status: "completed", daysAgo: 24, acceptHours: 5, pace: 0.95, review: [5, "الطلب المسبق زاد عن السنة اللي قبلها. بنرجع لها في رمضان."] },
+  { buyer: "abaq", seller: "faisal", brief: "blogSeo", tier: 1, status: "completed", daysAgo: 35, acceptHours: 9, pace: 0.9, review: [4, "المقالات مبنية على بحث حقيقي. الثالث كان أضعف من الأول والثاني."] },
+  { buyer: "nabd", seller: "faisal", brief: "blogSeo", tier: 0, status: "completed", daysAgo: 20, acceptHours: 14, pace: 1.2, review: [3, "المحتوى جيد لكن تأخر يوم عن الموعد بدون ما يبلغنا."] },
+  { buyer: "salman", seller: "reem", brief: "appArabic", tier: 1, status: "completed", daysAgo: 27, acceptHours: 4, pace: 0.75, review: [5, "تعريب طبيعي، وقاموس المصطلحات فادنا في باقي الشاشات."] },
+  { buyer: "abaq", seller: "abdulaziz", brief: "perfumeReel", tier: 1, status: "completed", daysAgo: 33, acceptHours: 2, pace: 0.85, review: [5, "الستوري بورد في العيّنة خلانا نتفق على الاتجاه قبل ما يبدأ. النتيجة فخمة."] },
+  { buyer: "abaq", seller: "abdulaziz", svc: 1, brief: "perfumeReel", tier: 1, status: "completed", daysAgo: 18, acceptHours: 1, pace: 0.6, review: [5, "صوتين للاختيار وسلّم في نفس اليوم."] },
+  { buyer: "nabd", seller: "abdulaziz", brief: "perfumeReel", tier: 0, status: "completed", daysAgo: 12, acceptHours: 3, pace: 0.9 },
+  { buyer: "abaq", seller: "lama", brief: "productPhotos", tier: 1, status: "completed", daysAgo: 29, acceptHours: 6, pace: 0.8, review: [5, "الصور طلعت كأنها استوديو، والملصق مطابق للعبوة."] },
+  { buyer: "deera", seller: "lama", svc: 1, brief: "cafeLogo", tier: 0, status: "completed", daysAgo: 22, acceptHours: 8, pace: 1.0, review: [4, "الشعار حلو. الاتجاه الأول ما ناسبنا وغيّرته بدون رسوم مثل ما هو مكتوب."] },
+  { buyer: "munira", seller: "lama", brief: "productPhotos", tier: 0, status: "completed", daysAgo: 9, acceptHours: 5, pace: 0.9, review: [5, "سريعة وفاهمة المطلوب من الملخص بدون أسئلة كثيرة."] },
+  { buyer: "salman", seller: "turki", brief: "appMotion", tier: 1, status: "completed", daysAgo: 26, acceptHours: 20, pace: 1.15, review: [3, "الفيديو جيد لكن التسليم تأخر، والرد كان بطيء."] },
+  { buyer: "deera", seller: "omar", brief: "waBot", tier: 0, status: "completed", daysAgo: 31, acceptHours: 2, pace: 0.9, review: [5, "اختبر البوت على أسئلتنا الحقيقية قبل التسليم. الرد على العملاء صار فوري."] },
+  { buyer: "abaq", seller: "omar", svc: 1, brief: "automation", tier: 1, status: "completed", daysAgo: 19, acceptHours: 3, pace: 0.8, review: [5, "الطلبات توصل القروب خلال ثواني، وسلّم توثيق واضح."] },
+  { buyer: "nabd", seller: "omar", svc: 1, brief: "automation", tier: 0, status: "completed", daysAgo: 8, acceptHours: 1, pace: 0.7, review: [4, "شغل نظيف. احتجنا إضافة خارج الملخص وسعّرها كإضافة مستقلة."] },
+  { buyer: "salman", seller: "sara", brief: "landing", tier: 1, status: "completed", daysAgo: 23, acceptHours: 4, pace: 0.85, review: [5, "الصفحة سريعة على الجوال والتسجيلات توصل للجدول مباشرة."] },
+  { buyer: "munira", seller: "sara", brief: "landing", tier: 0, status: "completed", daysAgo: 11, acceptHours: 7, pace: 0.95, review: [4, "ممتازة. النصوص احتاجت مراجعة بسيطة مني."] },
+  { buyer: "nabd", seller: "khaled", brief: "dashboard", tier: 0, status: "completed", daysAgo: 28, acceptHours: 10, pace: 0.9, review: [4, "اللوحة تطابق أرقام الإكسل. نتمنى مؤشرات أكثر في الباقة الأساسية."] },
+  // Live orders: every state the demo accounts need to act on.
+  { buyer: "deera", seller: "noura", brief: "sweetsEid", status: "awaiting_acceptance", daysAgo: 0, hoursAgo: 3 },
+  { buyer: "rawq", seller: "lama", svc: 1, brief: "cafeLogo", tier: 1, status: "in_progress", stage: "sample", daysAgo: 1, acceptHours: 4 },
+  { buyer: "rawq", seller: "noura", brief: "cafeLaunch", tier: 1, status: "sample_review", daysAgo: 1, hoursAgo: 6, acceptHours: 2 },
+  { buyer: "rawq", seller: "abdulaziz", brief: "perfumeReel", tier: 0, status: "delivered", daysAgo: 2, acceptHours: 2, pace: 0.8 },
+  { buyer: "abaq", seller: "noura", svc: 1, brief: "sweetsEid", tier: 1, status: "in_progress", stage: "full", daysAgo: 1, acceptHours: 1 },
+  { buyer: "salman", seller: "sara", brief: "landing", tier: 1, status: "revision_requested", daysAgo: 3, acceptHours: 5, pace: 0.8 },
+  { buyer: "abaq", seller: "turki", brief: "appMotion", tier: 0, status: "disputed", daysAgo: 3, acceptHours: 18 },
+  { buyer: "salman", seller: "khaled", brief: "dashboard", tier: 0, status: "cancelled", daysAgo: 6 },
 ];
 
 const PENDING_ANSWER = `(1) البرومبت: "أنت كاتب محتوى سوشال سعودي. اكتب 3 منشورات إطلاق لحساب مقهى مختص اسمه رَوْق في حائل. الجمهور: شباب وعوائل. النبرة: دافئة وقريبة بلهجة نجدية خفيفة. كل منشور: سطر افتتاحي جذاب، وصف قصير، دعوة لزيارة، 5 هاشتاقات محلية. تجنب المبالغة والإيموجي الكثير."
@@ -316,6 +545,9 @@ const PENDING_ANSWER = `(1) البرومبت: "أنت كاتب محتوى سوش
 - "الجمعة العصر؟ جيب أهلك وتعال… جلسات عائلية وحلا بيتي معمول بحب."
 (3) التعديلات: ChatGPT طلع بنبرة رسمية وفيها كلمات مصرية، فعدلتها لكلمات يستخدمها أهل حائل، وحذفت هاشتاقات عامة وحطيت #حائل #قهوة_مختصة_حائل، وتأكدت إن ما فيه ادعاءات صحية أو مبالغة تخالف أنظمة الإعلان.`;
 
+const SAMPLE_FILE: Record<Category, string> = { content: "/demo/social-post-1.svg", media: "/demo/reel-storyboard.svg", code: "/demo/landing-page.svg" };
+const FINAL_FILE: Record<Category, string> = { content: "/demo/social-post-2.svg", media: "/demo/product-shot.svg", code: "/demo/dashboard.svg" };
+
 async function main() {
   const reset = process.argv.includes("--reset");
   const [{ n }] = await db.select({ n: sql<number>`count(*)`.mapWith(Number) }).from(schema.user);
@@ -323,8 +555,12 @@ async function main() {
     console.log(`Database already has ${n} users. Run with --reset to wipe and reseed.`);
     return;
   }
+  if (reset && hosted && !process.argv.includes("--wipe-hosted")) {
+    console.log("Refusing to wipe a hosted database. This deletes every account and order. Add --wipe-hosted if that is really what you want.");
+    return;
+  }
   if (reset) {
-    await db.execute(sql`truncate table "review", "order_event", "order", "service", "seller_profile", "billing_profile", "rate_limit", "waitlist", "session", "account", "verification", "user" cascade`);
+    await db.execute(sql`truncate table "notification", "managed_request", "brief", "review", "order_event", "order", "service", "seller_profile", "billing_profile", "rate_limit", "waitlist", "session", "account", "verification", "user" cascade`);
   }
 
   const hash = await hashPassword(DEMO_PASSWORD);
@@ -336,17 +572,18 @@ async function main() {
     return id;
   };
 
-  await createUser("إدارة متقن", "admin@mutqen.demo", "admin", ago(60), await hashPassword(ADMIN_PASSWORD));
+  const adminId = await createUser("إدارة متقن", "admin@mutqen.demo", "admin", ago(60), await hashPassword(ADMIN_PASSWORD));
 
-  const buyerIds: string[] = [];
-  for (const b of BUYERS) buyerIds.push(await createUser(b.name, b.email, "buyer", ago(40 + Math.floor(rand() * 20))));
+  const buyers = {} as Record<BuyerKey, string>;
+  for (const [i, b] of BUYERS.entries()) buyers[b.key] = await createUser(b.name, b.email, "buyer", ago(58 - i * 3));
 
-  type SvcRef = { id: string; sellerId: string; category: Category; packages: ServicePackage[] };
-  const services: SvcRef[] = [];
+  type SvcRef = { id: string; sellerId: string; category: Category; title: string; packages: ServicePackage[] };
+  const bySeller: Record<string, { id: string; services: SvcRef[] }> = {};
 
-  for (const s of [...SELLERS, PENDING]) {
+  for (const [i, s] of [...SELLERS, PENDING].entries()) {
     const isPending = s === PENDING;
-    const uid = await createUser(s.name, s.email ?? `${s.key}@mutqen.demo`, "seller", ago(50));
+    const uid = await createUser(s.name, s.email ?? `${s.key}@mutqen.demo`, "seller", ago(55));
+    bySeller[s.key] = { id: uid, services: [] };
     await db.insert(schema.sellerProfile).values({
       userId: uid,
       displayName: s.name,
@@ -355,30 +592,28 @@ async function main() {
       city: s.city,
       categories: s.categories,
       aiTools: s.tools,
-      portfolio: [{ title: `نماذج أعمال ${s.name.split(" ")[0]}`, url: "https://example.com/portfolio" }],
+      portfolio: PORTFOLIO[s.key] ?? [],
       freelanceDocNumber: s.doc ?? null,
+      payoutName: isPending ? null : s.name,
+      iban: isPending ? null : demoIban(i + 1),
       status: isPending ? "pending" : "approved",
+      identityVerified: !isPending,
+      conductScore: isPending ? 75 : 100,
       verificationCategory: s.categories[0],
       verificationTask: "مهمة التحقق العملية",
-      verificationAnswer: isPending ? PENDING_ANSWER : "إجابة عملية مفصلة (بيانات تجريبية).",
+      verificationAnswer: isPending ? PENDING_ANSWER : "شرح خطوات العمل والأدوات والتعديلات اليدوية (بيانات عرض).",
+      verificationUrl: isPending ? null : (PORTFOLIO[s.key]?.[0]?.image ?? null),
       verificationScore: s.score,
       verificationFeedback: isPending
         ? "إجابة عملية: برومبت واضح بسياق ونبرة، وتعديلات بشرية مبررة، ومراعاة للسياق المحلي. يُنصح بذكر طريقة اختبار التفاعل."
         : "اجتاز التحقق العملي.",
-      reviewedAt: isPending ? null : ago(45),
-      createdAt: ago(50),
+      reviewedAt: isPending ? null : ago(50),
+      createdAt: ago(55),
     });
-    for (const sv of s.services) {
+    for (const [j, sv] of s.services.entries()) {
       const tiers = ["basic", "standard", "premium"] as const;
       const names = ["أساسية", "متقدمة", "شاملة"];
-      const packages: ServicePackage[] = tiers.map((tier, i) => ({
-        tier,
-        name: names[i],
-        price: sv.packages[i],
-        deliveryDays: sv.days[i],
-        revisions: i + 1,
-        features: sv.features[i],
-      }));
+      const packages: ServicePackage[] = tiers.map((tier, k) => ({ tier, name: names[k], price: sv.packages[k], deliveryDays: sv.days[k], revisions: k + 1, features: sv.features[k] }));
       const id = newId("s_");
       await db.insert(schema.service).values({
         id,
@@ -390,76 +625,107 @@ async function main() {
         packages,
         minPrice: sv.packages[0],
         minDeliveryDays: sv.days[0],
-        createdAt: ago(45 - Math.floor(rand() * 20)),
+        createdAt: ago(48 - j * 2),
       });
-      services.push({ id, sellerId: uid, category: s.categories[0], packages });
+      bySeller[s.key].services.push({ id, sellerId: uid, category: s.categories[0], title: sv.title, packages });
     }
   }
 
   // ── Orders ──
-  const plan: OrderStatus[] = [
-    ...Array(26).fill("completed"),
-    ...Array(4).fill("in_progress"),
-    ...Array(3).fill("delivered"),
-    "revision_requested",
-    "cancelled",
-  ];
-  const noura = services.filter((s) => s.sellerId === services[0].sellerId);
   const stats = new Map<string, { orders: number; ratings: number[] }>();
+  const together = new Map<string, number>();
+  const live: Partial<Record<OrderStatus, string>> = {};
 
-  for (let i = 0; i < plan.length; i++) {
-    const status = plan[i];
-    // make sure the demo seller and demo buyer have orders in every interesting state
-    const svc = i < 6 ? noura[i % noura.length] : pick(services);
-    const buyerId = i < 8 ? buyerIds[0] : pick(buyerIds);
-    if (svc.sellerId === buyerId) continue;
-    const pkg = svc.packages[Math.min(2, Math.floor(rand() * 3))];
-    const fees = computeFees(pkg.price);
-    const createdDaysAgo = status === "completed" ? 5 + Math.floor(rand() * 38) : status === "cancelled" ? 12 : Math.floor(rand() * 2);
-    const createdAt = ago(createdDaysAgo, Math.floor(rand() * 10));
-    const dueAt = new Date(createdAt.getTime() + pkg.deliveryDays * DAY);
-    const deliveredAt = ["completed", "delivered", "revision_requested"].includes(status) ? new Date(createdAt.getTime() + pkg.deliveryDays * DAY * (0.45 + rand() * 0.5)) : null;
-    const completedAt = status === "completed" ? new Date((deliveredAt ?? createdAt).getTime() + 6 * 3600 * 1000) : null;
-    const brief = pick(BRIEFS[svc.category]);
+  for (const sc of SCENARIOS) {
+    const seller = bySeller[sc.seller];
+    const svc = seller.services[sc.svc ?? 0];
+    const buyerId = buyers[sc.buyer];
+    const pkg = svc.packages[sc.tier ?? 1];
+    const pairKey = `${buyerId}:${seller.id}`;
+    const fees = computeFees(pkg.price, together.get(pairKey) ?? 0);
+    const managedFee = sc.managed ? MANAGED_FEE : 0;
+    const { input, b } = BRIEF_BANK[sc.brief];
+    const sb: StructuredBrief = { ...b, category: svc.category };
+
+    const createdAt = ago(sc.daysAgo, sc.hoursAgo ?? 0);
+    const accepted = sc.status !== "awaiting_acceptance" && sc.status !== "cancelled";
+    const acceptedAt = accepted ? new Date(createdAt.getTime() + (sc.acceptHours ?? 3) * HOUR) : null;
+    const sampleSpan = Math.max(1, Math.ceil(pkg.deliveryDays / 3)) * DAY;
+    const dueAt = acceptedAt ? new Date(acceptedAt.getTime() + pkg.deliveryDays * DAY) : null;
+    const sampleDueAt = acceptedAt ? new Date(acceptedAt.getTime() + sampleSpan) : null;
+    const pastSample = accepted && !(sc.status === "in_progress" && sc.stage === "sample");
+    const sampleDeliveredAt = pastSample ? new Date(Math.min(acceptedAt!.getTime() + sampleSpan * 0.7, Date.now() - 2 * HOUR)) : null;
+    const hasDelivery = ["completed", "delivered", "revision_requested"].includes(sc.status);
+    const deliveredAt = hasDelivery ? new Date(Math.min(acceptedAt!.getTime() + pkg.deliveryDays * DAY * (sc.pace ?? 0.85), Date.now() - HOUR)) : null;
+    const completedAt = sc.status === "completed" ? new Date(Math.min(deliveredAt!.getTime() + 5 * HOUR, Date.now() - HOUR / 2)) : null;
+
+    const briefId = newId("b_");
+    await db.insert(schema.brief).values({ id: briefId, ownerId: buyerId, input, category: svc.category, structured: sb, status: "ordered", createdAt, updatedAt: createdAt });
+
     const id = newId("o_");
+    const paymentRef = `TEST-${id.slice(2, 10).toUpperCase()}`;
     await db.insert(schema.order).values({
       id,
       serviceId: svc.id,
       buyerId,
-      sellerId: svc.sellerId,
+      sellerId: seller.id,
       packageTier: pkg.tier,
       packageName: pkg.name,
       price: fees.price,
       buyerFee: 0,
       platformCommission: fees.platformCommission,
       sellerEarning: fees.sellerEarning,
-      brief,
-      status,
-      paymentRef: `TEST-MADA-${id.slice(2, 10)}`,
-      revisionsLeft: status === "revision_requested" ? pkg.revisions - 1 : pkg.revisions,
-      dueAt,
+      brief: `${sb.title}\n${sb.goal}`,
+      structuredBrief: sb,
+      briefId,
+      status: sc.status,
+      stage: sc.stage ?? (pastSample ? "full" : "sample"),
+      paymentRef,
+      revisionsLeft: sc.status === "revision_requested" ? Math.max(0, pkg.revisions - 1) : pkg.revisions,
+      deliveryDays: pkg.deliveryDays,
+      acceptBy: new Date(createdAt.getTime() + 24 * HOUR),
+      acceptedAt,
+      dueAt: sc.status === "revision_requested" ? new Date(Date.now() + 1.5 * DAY) : dueAt,
+      sampleDueAt,
+      sampleDeliveredAt,
+      managed: Boolean(sc.managed),
+      managedFee,
+      disputeReason: sc.status === "disputed" ? "العيّنة الأولى ما تطابق الملخص: المطلوب ثلاث خطوات (ابحث، احجز، ادفع) والعيّنة تشرح خطوة وحدة، والمستقل ما رد من يومين." : null,
+      disputePrevStatus: sc.status === "disputed" ? "sample_review" : null,
       deliveredAt,
       completedAt,
       createdAt,
     });
+    live[sc.status] ??= id;
+
+    let tick = 0;
     const ev = (type: string, at: Date, actorId: string | null, message?: string, attachmentUrl?: string) =>
-      db.insert(schema.orderEvent).values({ id: newId("e_"), orderId: id, type, actorId, message, attachmentUrl, createdAt: at });
-    await ev("created", createdAt, buyerId, brief);
-    await ev("payment_held", new Date(createdAt.getTime() + 1000), null, `تم حجز ${fees.total} ر.س لدى متقن (مرجع الدفع التجريبي). لن يُحوَّل المبلغ للمستقل إلا بعد موافقتك على التسليم.`);
-    await ev("message", new Date(createdAt.getTime() + 2 * 3600 * 1000), svc.sellerId, "هلا! استلمت الطلب وبديت عليه، بأرسل لك تصور أولي قريب.");
-    if (deliveredAt) await ev("delivered", deliveredAt, svc.sellerId, "سلّمت الملفات كاملة. استخدمت أدوات الذكاء الاصطناعي للمسودات وراجعت كل شي يدوياً.", "https://drive.google.com/demo-delivery");
-    if (status === "revision_requested") await ev("revision_requested", new Date(deliveredAt!.getTime() + 3 * 3600 * 1000), buyerId, "حلو جداً، بس نبي النبرة أخف شوي في المنشور الثاني.");
-    if (status === "cancelled") await ev("cancelled", new Date(dueAt.getTime() + DAY), buyerId, `أُلغي الطلب وأُعيد المبلغ كاملاً (${fees.total} ر.س) للعميل.`);
-    if (completedAt) {
-      await ev("completed", completedAt, buyerId, "وافق العميل على التسليم.");
-      await ev("payment_released", new Date(completedAt.getTime() + 1000), null, `تم تحويل ${fees.sellerEarning} ر.س لمحفظة المستقل بعد خصم عمولة المنصة.`);
+      db.insert(schema.orderEvent).values({ id: newId("e_"), orderId: id, type, actorId, message, attachmentUrl, createdAt: new Date(at.getTime() + tick++ * 1000) });
+    await ev("created", createdAt, buyerId, `${sb.title}\n${sb.goal}`);
+    await ev("payment_held", createdAt, null, `انحجز ${fees.total + managedFee} ر.س لدى متقن (مرجع ${paymentRef}). ما يتحوّل للمستقل إلا بعد ما تعتمد التسليم.`);
+    if (acceptedAt) await ev("accepted", acceptedAt, seller.id, "قبلت الطلب. الملخص واضح وبأرسل العيّنة الأولى في موعدها.");
+    if (sampleDeliveredAt) {
+      await ev("sample_delivered", sampleDeliveredAt, seller.id, "هذي العيّنة الأولى عشان نتأكد من الاتجاه قبل ما أكمل الباقي.", SAMPLE_FILE[svc.category]);
+      if (sc.status === "disputed") {
+        await ev("disputed", new Date(sampleDeliveredAt.getTime() + 20 * HOUR), buyerId, "العيّنة الأولى ما تطابق الملخص: المطلوب ثلاث خطوات (ابحث، احجز، ادفع) والعيّنة تشرح خطوة وحدة، والمستقل ما رد من يومين.");
+      } else if (sc.status !== "sample_review") {
+        await ev("sample_approved", new Date(sampleDeliveredAt.getTime() + 3 * HOUR), buyerId, "الاتجاه مضبوط، كمّل.");
+      }
     }
+    if (deliveredAt) await ev("delivered", deliveredAt, seller.id, "سلّمت العمل كامل حسب الملخص. استخدمت أدوات الذكاء الاصطناعي في المسودات وراجعت كل شي يدوياً.", FINAL_FILE[svc.category]);
+    if (sc.status === "revision_requested") await ev("revision_requested", new Date(deliveredAt!.getTime() + 2 * HOUR), buyerId, "نموذج التسجيل ما يوصّل البيانات للجدول، وهذا من معايير القبول.");
+    if (sc.status === "cancelled") await ev("cancelled", new Date(createdAt.getTime() + 24 * HOUR), null, `ما قبل المستقل الطلب خلال 24 ساعة. رجع المبلغ كامل (${fees.total} ر.س) للعميل تلقائياً.`);
+    if (completedAt) {
+      await ev("completed", completedAt, buyerId, "اعتمد العميل التسليم.");
+      await ev("payment_released", completedAt, null, `تحوّل ${fees.sellerEarning} ر.س للمستقل بعد عمولة المنصة (${Math.round(fees.rate * 100)}٪).`);
+      together.set(pairKey, (together.get(pairKey) ?? 0) + 1);
+    }
+
     const st = stats.get(svc.id) ?? { orders: 0, ratings: [] };
     st.orders++;
-    if (status === "completed" && rand() > 0.15) {
-      const rating = rand() > 0.8 ? 4 : 5;
-      st.ratings.push(rating);
-      await db.insert(schema.review).values({ id: newId("r_"), orderId: id, serviceId: svc.id, sellerId: svc.sellerId, buyerId, rating, comment: pick(COMMENTS), createdAt: new Date(completedAt!.getTime() + 3600 * 1000) });
+    if (sc.review && completedAt) {
+      st.ratings.push(sc.review[0]);
+      await db.insert(schema.review).values({ id: newId("r_"), orderId: id, serviceId: svc.id, sellerId: seller.id, buyerId, rating: sc.review[0], comment: sc.review[1], createdAt: new Date(completedAt.getTime() + 2 * HOUR) });
     }
     stats.set(svc.id, st);
   }
@@ -469,16 +735,24 @@ async function main() {
     await db.update(schema.service).set({ ordersCount: st.orders, ratingAvg: avg, ratingCount: st.ratings.length }).where(sql`${schema.service.id} = ${sid}`);
   }
 
-  for (const [email, side] of [
-    ["lead1@example.com", "buyer"],
-    ["lead2@example.com", "seller"],
-    ["lead3@example.com", "seller"],
-  ] as const)
-    await db.insert(schema.waitlist).values({ id: newId("w_"), email, side });
+  // ── A managed-service request waiting for the team ──
+  const managedBrief = newId("b_");
+  await db.insert(schema.brief).values({ id: managedBrief, ownerId: buyers.munira, input: BRIEF_BANK.waBot.input, category: "code", structured: BRIEF_BANK.waBot.b, status: "managed", createdAt: ago(0, 5), updatedAt: ago(0, 5) });
+  await db.insert(schema.managedRequest).values({ id: newId("m_"), briefId: managedBrief, buyerId: buyers.munira, budget: 2000, note: "أول مرة أطلب شي تقني، أبي أحد يتابع معي.", createdAt: ago(0, 5) });
 
-  console.log(`✓ Seeded: ${SELLERS.length + 1} freelancers, ${services.length} services, ${plan.length} orders.`);
-  console.log(`  Demo accounts: buyer@mutqen.demo · seller@mutqen.demo · pending@mutqen.demo — password: ${process.env.SEED_PASSWORD ? "(from SEED_PASSWORD)" : DEMO_PASSWORD}`);
-  console.log(`  Admin account: admin@mutqen.demo — password: ${process.env.SEED_ADMIN_PASSWORD ? "(from SEED_ADMIN_PASSWORD)" : ADMIN_PASSWORD}`);
+  // ── Notifications the demo accounts will see in the bell ──
+  const note = (userId: string, title: string, body: string, href: string, hoursAgo: number) =>
+    db.insert(schema.notification).values({ id: newId("n_"), userId, title, body, href, createdAt: ago(0, hoursAgo) });
+  if (live.sample_review) await note(buyers.rawq, "العيّنة الأولى جاهزة", "راجعها واعتمد الاتجاه أو اطلب تغييره.", `/orders/${live.sample_review}`, 2);
+  if (live.delivered) await note(buyers.rawq, "وصل التسليم الكامل", "راجعه على معايير القبول واعتمده.", `/orders/${live.delivered}`, 1);
+  if (live.awaiting_acceptance) await note(bySeller.noura.id, "وصلك طلب جديد", "اقبله أو اسأل العميل خلال 24 ساعة.", `/orders/${live.awaiting_acceptance}`, 3);
+  if (live.disputed) await note(adminId, "خلاف جديد يحتاج قرار", "العميل ضغط «عندي مشكلة» والمؤقتات متوقفة.", `/orders/${live.disputed}`, 4);
+  await note(adminId, "طلب خدمة مُدارة جديد", BRIEF_BANK.waBot.b.title, "/admin/managed", 5);
+  await note(adminId, "مستقل بانتظار التوثيق", PENDING.name, "/admin", 8);
+
+  console.log(`✓ Seeded: ${SELLERS.length + 1} freelancers, ${Object.values(bySeller).reduce((a, s) => a + s.services.length, 0)} services, ${SCENARIOS.length} orders.`);
+  console.log(`  Accounts: buyer@mutqen.demo · seller@mutqen.demo · pending@mutqen.demo — password: ${process.env.SEED_PASSWORD ? "(from SEED_PASSWORD)" : DEMO_PASSWORD}`);
+  console.log(`  Admin: admin@mutqen.demo — password: ${process.env.SEED_ADMIN_PASSWORD ? "(from SEED_ADMIN_PASSWORD)" : ADMIN_PASSWORD}`);
 }
 
 main()
