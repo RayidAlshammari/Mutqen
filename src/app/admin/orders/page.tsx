@@ -44,7 +44,7 @@ export default async function AdminOrdersPage({ searchParams }: { searchParams: 
             </thead>
             <tbody className="divide-y divide-sand-100">
               {rows.map((o) => {
-                const late = o.status === "in_progress" && o.dueAt.getTime() < Date.now();
+                const late = (o.status === "in_progress" || o.status === "revision_requested") && o.dueAt != null && o.dueAt.getTime() < Date.now();
                 return (
                   <tr key={o.id} className="hover:bg-sand-50">
                     <td className="p-3">

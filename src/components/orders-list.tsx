@@ -11,7 +11,7 @@ export type OrderRow = {
   buyerFee: number;
   sellerEarning: number;
   packageName: string;
-  dueAt: Date;
+  dueAt: Date | null;
   createdAt: Date;
   serviceTitle: string;
   category: Category;

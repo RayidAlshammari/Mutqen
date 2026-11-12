@@ -17,35 +17,99 @@ function useResettingAction(action: BoundAction) {
   return { state, run, pending, ref };
 }
 
-export function DeliverForm({ action }: { action: BoundAction }) {
+/** One note (and optionally a link) sent with an order action: deliver, ask for a change, raise a problem… */
+export function NoteForm({
+  action,
+  label,
+  placeholder,
+  button,
+  pendingLabel = "…",
+  variant = "primary",
+  withUrl,
+  urlLabel = "رابط العمل (Google Drive، Figma، GitHub…)",
+}: {
+  action: BoundAction;
+  label: string;
+  placeholder?: string;
+  button: string;
+  pendingLabel?: string;
+  variant?: "primary" | "secondary" | "danger";
+  withUrl?: boolean;
+  urlLabel?: string;
+}) {
   const { state, run, pending, ref } = useResettingAction(action);
   return (
     <form ref={ref} onSubmit={run} className="space-y-3">
       <div>
-        <Label htmlFor="d-msg">رسالة التسليم</Label>
-        <Textarea id="d-msg" name="message" required placeholder="وش سلّمت، وكيف استخدمت أدوات الذكاء الاصطناعي، وأي ملاحظات للعميل" />
+        <Label>{label}</Label>
+        <Textarea name="message" required placeholder={placeholder} className="min-h-20" aria-label={label} />
       </div>
-      <div>
-        <Label htmlFor="d-url">رابط الملفات (Google Drive، Figma، GitHub…)</Label>
-        <Input id="d-url" name="url" type="url" dir="ltr" placeholder="https://" />
-      </div>
+      {withUrl && (
+        <div>
+          <Label>{urlLabel}</Label>
+          <Input name="url" type="url" dir="ltr" placeholder="https://" required aria-label={urlLabel} />
+        </div>
+      )}
       <FormError message={state?.error} />
-      <Button type="submit" disabled={pending} className="w-full">
-        {pending ? "جارٍ التسليم…" : "سلّم الطلب"}
+      <Button type="submit" variant={variant} disabled={pending} className="w-full">
+        {pending ? pendingLabel : button}
       </Button>
     </form>
   );
 }
 
-export function RevisionForm({ action, left }: { action: BoundAction; left: number }) {
+export function AddonOfferForm({ action }: { action: BoundAction }) {
   const { state, run, pending, ref } = useResettingAction(action);
   return (
     <form ref={ref} onSubmit={run} className="space-y-3">
-      <Label htmlFor="r-msg">وش تبي يتعدل؟ (باقي لك {left.toLocaleString("ar-SA")})</Label>
-      <Textarea id="r-msg" name="message" required className="min-h-20" />
+      <div>
+        <Label>وش يشمل العمل الإضافي؟</Label>
+        <Textarea name="title" required className="min-h-16" placeholder="مثال: 4 منشورات إضافية بنفس الأسلوب" aria-label="وصف العمل الإضافي" />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label>السعر (ر.س)</Label>
+          <Input name="price" type="number" min={20} required dir="ltr" aria-label="السعر" />
+        </div>
+        <div>
+          <Label>المدة (أيام)</Label>
+          <Input name="days" type="number" min={1} max={60} defaultValue={2} required dir="ltr" aria-label="المدة" />
+        </div>
+      </div>
       <FormError message={state?.error} />
       <Button type="submit" variant="secondary" disabled={pending} className="w-full">
-        {pending ? "…" : "اطلب تعديل"}
+        {pending ? "…" : "أرسل العرض للعميل"}
+      </Button>
+    </form>
+  );
+}
+
+export function ResolveDisputeForm({ action, price }: { action: BoundAction; price: number }) {
+  const [state, run, pending] = useFormAction(action, undefined);
+  const [decision, setDecision] = useState("resume");
+  return (
+    <form onSubmit={run} className="space-y-3">
+      <div>
+        <Label>القرار</Label>
+        <select name="decision" value={decision} onChange={(e) => setDecision(e.target.value)} className="w-full rounded-xl border border-sand-300 bg-white px-3 py-2 text-sm" aria-label="القرار">
+          <option value="resume">يكمل الطلب من حيث توقف</option>
+          <option value="partial">استرداد جزئي للعميل</option>
+          <option value="refund">إلغاء واسترداد كامل</option>
+        </select>
+      </div>
+      {decision === "partial" && (
+        <div>
+          <Label>المبلغ المسترد للعميل (من {price.toLocaleString("ar-SA")} ر.س)</Label>
+          <Input name="amount" type="number" min={1} max={price - 1} required dir="ltr" aria-label="المبلغ المسترد" />
+        </div>
+      )}
+      <div>
+        <Label>سبب القرار (يظهر للطرفين)</Label>
+        <Textarea name="note" required className="min-h-20" aria-label="سبب القرار" />
+      </div>
+      <FormError message={state?.error} />
+      <Button type="submit" disabled={pending} className="w-full">
+        {pending ? "…" : "اعتمد القرار"}
       </Button>
     </form>
   );

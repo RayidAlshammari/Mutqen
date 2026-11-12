@@ -189,8 +189,8 @@ export async function platformStats() {
       completed: sql<number>`count(*) filter (where ${order.status} = 'completed')`.mapWith(Number),
       gmv: sql<number>`coalesce(sum(${order.price}) filter (where ${order.status} <> 'cancelled'), 0)`.mapWith(Number),
       completedGmv: sql<number>`coalesce(sum(${order.price}) filter (where ${order.status} = 'completed'), 0)`.mapWith(Number),
-      revenue: sql<number>`coalesce(sum(${order.buyerFee} + ${order.platformCommission}) filter (where ${order.status} = 'completed'), 0)`.mapWith(Number),
-      escrow: sql<number>`coalesce(sum(${order.price} + ${order.buyerFee}) filter (where ${order.status} in ('in_progress','delivered','revision_requested')), 0)`.mapWith(Number),
+      revenue: sql<number>`coalesce(sum(${order.buyerFee} + ${order.platformCommission} + ${order.managedFee}) filter (where ${order.status} = 'completed'), 0)`.mapWith(Number),
+      escrow: sql<number>`coalesce(sum(${order.price} + ${order.buyerFee} + ${order.managedFee}) filter (where ${order.status} not in ('completed','cancelled')), 0)`.mapWith(Number),
       repeatBuyers: sql<number>`(select count(*) from (select buyer_id from "order" group by buyer_id having count(*) > 1) t)`.mapWith(Number),
       buyers: sql<number>`count(distinct ${order.buyerId})`.mapWith(Number),
     })

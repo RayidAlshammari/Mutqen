@@ -15,7 +15,7 @@ export default async function DashboardPage() {
 
   if (user.role === "seller") {
     const [profile, orders, services] = await Promise.all([getSellerProfile(user.id), listOrdersForUser(user.id, "seller"), listServicesBySeller(user.id)]);
-    const active = orders.filter((o) => ["in_progress", "revision_requested", "delivered"].includes(o.status));
+    const active = orders.filter((o) => !["completed", "cancelled"].includes(o.status));
     const earned = orders.filter((o) => o.status === "completed").reduce((s, o) => s + o.sellerEarning, 0);
     const held = active.reduce((s, o) => s + o.sellerEarning, 0);
     const st = SELLER_STATUS[profile?.status ?? "draft"];
@@ -48,14 +48,14 @@ export default async function DashboardPage() {
   }
 
   const orders = await listOrdersForUser(user.id, "buyer");
-  const active = orders.filter((o) => ["in_progress", "revision_requested", "delivered"].includes(o.status));
+  const active = orders.filter((o) => !["completed", "cancelled"].includes(o.status));
   const spent = orders.filter((o) => o.status !== "cancelled").reduce((s, o) => s + o.price + o.buyerFee, 0);
   return (
     <Container className="py-10">
-      <PageHeader title={`أهلاً ${user.name.split(" ")[0]} 👋`} subtitle="وش تبي تنجز اليوم؟" actions={<LinkButton href="/assistant">✨ اطلب بالمساعد الذكي</LinkButton>} />
+      <PageHeader title={`أهلاً ${user.name.split(" ")[0]} 👋`} subtitle="وش تبي تنجز اليوم؟" actions={<LinkButton href="/brief">اطلب خدمة جديدة</LinkButton>} />
       <div className="grid gap-4 sm:grid-cols-3">
         <Stat label="طلبات نشطة" value={num(active.length)} />
-        <Stat label="بانتظار مراجعتك" value={num(orders.filter((o) => o.status === "delivered").length)} />
+        <Stat label="بانتظار مراجعتك" value={num(orders.filter((o) => o.status === "delivered" || o.status === "sample_review").length)} />
         <Stat label="إجمالي المدفوع" value={sar(spent)} />
       </div>
       <h2 className="mb-3 mt-10 text-lg font-bold">طلباتي</h2>
@@ -67,7 +67,7 @@ export default async function DashboardPage() {
             <p className="text-lg font-semibold">ما عندك طلبات بعد</p>
             <p className="mt-1 text-sm text-stone-600">اكتب احتياجك للمساعد الذكي وهو يرشح لك المستقل المناسب.</p>
             <div className="mt-5 flex justify-center gap-2">
-              <LinkButton href="/assistant">جرّب المساعد الذكي</LinkButton>
+              <LinkButton href="/brief">اطلب أول خدمة</LinkButton>
               <LinkButton href="/services" variant="secondary">تصفح الخدمات</LinkButton>
             </div>
           </Card>

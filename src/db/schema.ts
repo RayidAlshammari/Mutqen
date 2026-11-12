@@ -79,7 +79,10 @@ export type ServicePackage = {
   features: string[];
 };
 
-export type PortfolioItem = { title: string; url?: string; description?: string };
+export type PortfolioItem = { title: string; url?: string; description?: string; image?: string };
+
+/** A file or link the client hands over with the brief (logo, brand guide, references). */
+export type BriefAsset = { label: string; url: string };
 
 // One row per freelancer. status: draft | pending | approved | rejected
 export const sellerProfile = pgTable(
@@ -100,10 +103,19 @@ export const sellerProfile = pgTable(
     payoutName: text("payout_name"),
     iban: text("iban"),
     status: text("status").notNull().default("draft"),
+    /** Shown to the freelancer when the application is rejected or the badge is revoked. */
+    reviewNote: text("review_note"),
+    nationalId: text("national_id"),
+    identityVerified: boolean("identity_verified").notNull().default(false),
+    /** Short scenario quiz on scoping and managing client expectations (0-100). */
+    conductScore: integer("conduct_score"),
     // AI skill verification
     verificationCategory: text("verification_category"),
     verificationTask: text("verification_task"),
     verificationAnswer: text("verification_answer"),
+    /** Link to the actual deliverable produced for the practical task. */
+    verificationUrl: text("verification_url"),
+    verificationStartedAt: timestamp("verification_started_at"),
     verificationScore: integer("verification_score"),
     verificationFeedback: text("verification_feedback"),
     reviewedAt: timestamp("reviewed_at"),
@@ -135,23 +147,99 @@ export const service = pgTable(
   (t) => [index("service_category_idx").on(t.category), index("service_seller_idx").on(t.sellerId)],
 );
 
+/**
+ * Order lifecycle. Money is held from the moment the client pays.
+ *   awaiting_acceptance → in_progress (stage: sample) → sample_review
+ *   → in_progress (stage: full) → delivered → completed
+ * Side paths: revision_requested, disputed, cancelled.
+ */
 export type OrderStatus =
-  | "in_progress" // paid, funds held in escrow
+  | "awaiting_acceptance" // paid; the freelancer has 24h to accept or ask questions
+  | "in_progress"
+  | "sample_review" // first sample delivered; the client confirms the direction
   | "delivered"
   | "revision_requested"
+  | "disputed" // the client raised a problem; timers are paused until the admin decides
   | "completed"
   | "cancelled";
+
+export type OrderStage = "sample" | "full";
+
+export const OPEN_ORDER_STATUSES: OrderStatus[] = [
+  "awaiting_acceptance",
+  "in_progress",
+  "sample_review",
+  "delivered",
+  "revision_requested",
+  "disputed",
+];
 
 export type StructuredBrief = {
   title: string;
   category: Category;
   goal: string;
+  /** What the client receives, as a checklist. */
   deliverables: string[];
+  /** How both sides know the work is done; revisions are judged against this list. */
+  acceptance?: string[];
+  /** What the client hands over (logo, colours, photos, access). */
+  clientProvides?: string[];
   audience?: string;
   tone?: string;
+  style?: string[];
+  colors?: string[];
+  references?: string[];
+  assets?: BriefAsset[];
+  answers?: { q: string; a: string }[];
   timeline?: string;
   budgetHint?: string;
 };
+
+// A brief the client builds with the assistant before choosing a freelancer.
+// status: draft | ready | ordered | managed
+export const brief = pgTable(
+  "brief",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id").references(() => user.id, { onDelete: "set null" }),
+    /** Anonymous visitors own their draft through a cookie until they sign up. */
+    ownerKey: text("owner_key"),
+    input: text("input").notNull(),
+    category: text("category").$type<Category>().notNull(),
+    questions: jsonb("questions").$type<{ id: string; q: string; hint?: string; options?: string[]; multi?: boolean }[]>().notNull().default([]),
+    /** Set when the client started from a specific service page. */
+    serviceId: text("service_id"),
+    tier: text("tier"),
+    structured: jsonb("structured").$type<StructuredBrief | null>(),
+    status: text("status").notNull().default("draft"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("brief_owner_idx").on(t.ownerId)],
+);
+
+// "Let Mutqen run it": the team picks the freelancer and follows the order.
+// status: new | offered | accepted | cancelled
+export const managedRequest = pgTable(
+  "managed_request",
+  {
+    id: text("id").primaryKey(),
+    briefId: text("brief_id")
+      .notNull()
+      .references(() => brief.id, { onDelete: "cascade" }),
+    buyerId: text("buyer_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    budget: integer("budget"),
+    status: text("status").notNull().default("new"),
+    offeredServiceId: text("offered_service_id").references(() => service.id),
+    offeredTier: text("offered_tier"),
+    note: text("note"),
+    orderId: text("order_id"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("managed_status_idx").on(t.status)],
+);
 
 export const order = pgTable(
   "order",
@@ -175,10 +263,29 @@ export const order = pgTable(
     sellerEarning: integer("seller_earning").notNull(),
     brief: text("brief").notNull(),
     structuredBrief: jsonb("structured_brief").$type<StructuredBrief | null>(),
-    status: text("status").$type<OrderStatus>().notNull().default("in_progress"),
+    status: text("status").$type<OrderStatus>().notNull().default("awaiting_acceptance"),
+    stage: text("stage").$type<OrderStage>().notNull().default("sample"),
     paymentRef: text("payment_ref").notNull(),
     revisionsLeft: integer("revisions_left").notNull().default(1),
-    dueAt: timestamp("due_at").notNull(),
+    /** One change of direction after the first sample is included in every order. */
+    sampleChangesLeft: integer("sample_changes_left").notNull().default(1),
+    deliveryDays: integer("delivery_days").notNull().default(3),
+    /** The freelancer must accept (or the order is refunded) before this time. */
+    acceptBy: timestamp("accept_by"),
+    acceptedAt: timestamp("accepted_at"),
+    /** Set when the freelancer accepts: the clock starts on acceptance, not on payment. */
+    dueAt: timestamp("due_at"),
+    sampleDueAt: timestamp("sample_due_at"),
+    sampleDeliveredAt: timestamp("sample_delivered_at"),
+    briefId: text("brief_id"),
+    /** Extra work outside the original brief is a linked order with its own price. */
+    parentOrderId: text("parent_order_id"),
+    managed: boolean("managed").notNull().default(false),
+    managedFee: integer("managed_fee").notNull().default(0),
+    disputeReason: text("dispute_reason"),
+    disputePrevStatus: text("dispute_prev_status").$type<OrderStatus>(),
+    /** Part of the price returned to the client when a dispute ends in a partial refund. */
+    refundAmount: integer("refund_amount").notNull().default(0),
     deliveredAt: timestamp("delivered_at"),
     completedAt: timestamp("completed_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -186,7 +293,9 @@ export const order = pgTable(
   (t) => [index("order_buyer_idx").on(t.buyerId), index("order_seller_idx").on(t.sellerId)],
 );
 
-// type: created | message | delivered | revision_requested | completed | cancelled
+// type: created | payment_held | accepted | message | sample_delivered | sample_approved |
+//       sample_change | delivered | revision_requested | addon_offer | disputed |
+//       dispute_resolved | completed | payment_released | cancelled
 export const orderEvent = pgTable(
   "order_event",
   {
@@ -198,9 +307,28 @@ export const orderEvent = pgTable(
     type: text("type").notNull(),
     message: text("message"),
     attachmentUrl: text("attachment_url"),
+    /** Structured payload, e.g. an add-on offer: { price, days, title, accepted }. */
+    data: jsonb("data").$type<Record<string, unknown> | null>(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [index("event_order_idx").on(t.orderId)],
+);
+
+// In-app notifications (the bell). The same event is also emailed when email is configured.
+export const notification = pgTable(
+  "notification",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    body: text("body").notNull().default(""),
+    href: text("href"),
+    readAt: timestamp("read_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("notification_user_idx").on(t.userId, t.createdAt)],
 );
 
 export const review = pgTable(

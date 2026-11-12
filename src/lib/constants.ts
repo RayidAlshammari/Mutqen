@@ -22,8 +22,14 @@ export const FEES = {
 export const commissionRateFor = (completedWithSameClient: number) =>
   completedWithSameClient >= FEES.repeatAfterOrders ? FEES.repeatCommissionRate : FEES.commissionRate;
 
-/** Deliveries left unreviewed this long are completed automatically. */
+/** Deliveries and samples left unreviewed this long move forward automatically. */
 export const AUTO_COMPLETE_DAYS = 3;
+/** A paid order the freelancer hasn't accepted within this time is refunded in full. */
+export const ACCEPT_HOURS = 24;
+/** Extra time the freelancer gets after the client asks for a revision. */
+export const REVISION_DAYS = 2;
+/** Fixed fee for "let Mutqen run it": the team writes the brief, picks the freelancer and follows the order. */
+export const MANAGED_FEE = 99;
 
 export function computeFees(price: number, completedWithSameClient = 0) {
   const rate = commissionRateFor(completedWithSameClient);
@@ -77,9 +83,12 @@ export const AI_TOOLS: Record<Category, string[]> = {
 export const ALL_AI_TOOLS = Array.from(new Set(Object.values(AI_TOOLS).flat()));
 
 export const ORDER_STATUS: Record<string, { label: string; tone: "amber" | "blue" | "violet" | "green" | "gray" }> = {
+  awaiting_acceptance: { label: "بانتظار قبول المستقل", tone: "amber" },
   in_progress: { label: "قيد التنفيذ", tone: "blue" },
-  delivered: { label: "تم التسليم — بانتظار مراجعتك", tone: "violet" },
+  sample_review: { label: "العيّنة الأولى جاهزة للمراجعة", tone: "violet" },
+  delivered: { label: "تم التسليم — بانتظار الاعتماد", tone: "violet" },
   revision_requested: { label: "مطلوب تعديل", tone: "amber" },
+  disputed: { label: "مشكلة قيد المراجعة لدى متقن", tone: "amber" },
   completed: { label: "مكتمل", tone: "green" },
   cancelled: { label: "ملغي", tone: "gray" },
 };
@@ -92,3 +101,26 @@ export const SELLER_STATUS: Record<string, { label: string; tone: "amber" | "gre
 };
 
 export const SAUDI_CITIES = ["الرياض", "جدة", "الدمام", "مكة المكرمة", "المدينة المنورة", "حائل", "أبها", "القصيم", "تبوك", "الخبر"];
+
+/* ───────────── Brief builder: choices the client picks instead of writing ───────────── */
+
+export const STYLE_CHOICES: [string, string][] = [
+  ["كلاسيكي", "عصري"],
+  ["هادئ", "جريء"],
+  ["رسمي", "مرح"],
+  ["بسيط", "غني بالتفاصيل"],
+];
+
+export const PALETTES: { name: string; colors: string[] }[] = [
+  { name: "ترابي دافئ", colors: ["#6f4e37", "#c8a27c", "#f3e9dc"] },
+  { name: "أخضر وطبيعي", colors: ["#1b5444", "#7aa874", "#eef5e6"] },
+  { name: "أزرق وهادئ", colors: ["#1d3557", "#6fa3d8", "#edf4fb"] },
+  { name: "أسود وذهبي", colors: ["#111111", "#c9a227", "#f5f0e4"] },
+  { name: "ألوان مرحة", colors: ["#ff6b6b", "#ffd166", "#4ecdc4"] },
+  { name: "باستيل ناعم", colors: ["#f6c1c7", "#cde7f0", "#fdf3d8"] },
+];
+
+export const PALETTE_EXTRA = ["ألوان هويتي (أرفقتها)", "خلّ المستقل يقترح"];
+
+/** Set DEMO_MODE=1 on a demo or staging deployment that runs on sample data. Never on the live site. */
+export const DEMO_MODE = process.env.DEMO_MODE === "1";

@@ -31,3 +31,23 @@ export function daysLabel(d: number) {
   if (d <= 10) return `${num(d)} أيام`;
   return `${num(d)} يوم`;
 }
+
+/**
+ * Arabic count agreement: 1 → "طلب واحد", 2 → "طلبين", 3-10 → "٤ طلبات", 11+ → "١٢ طلب".
+ * forms = [one, two, few (3-10), many (11+)]
+ */
+export function arCount(n: number, forms: [string, string, string, string]) {
+  if (n === 1) return forms[0];
+  if (n === 2) return forms[1];
+  const r = n % 100;
+  return `${num(n)} ${r >= 3 && r <= 10 ? forms[2] : forms[3]}`;
+}
+
+export const COUNT = {
+  orders: ["طلب واحد", "طلبين", "طلبات", "طلب"] as [string, string, string, string],
+  services: ["خدمة واحدة", "خدمتين", "خدمات", "خدمة"] as [string, string, string, string],
+  reviews: ["تقييم واحد", "تقييمين", "تقييمات", "تقييم"] as [string, string, string, string],
+  hours: ["ساعة", "ساعتين", "ساعات", "ساعة"] as [string, string, string, string],
+  revisions: ["تعديل واحد", "تعديلين", "تعديلات", "تعديل"] as [string, string, string, string],
+  clients: ["عميل واحد", "عميلين", "عملاء", "عميل"] as [string, string, string, string],
+};
