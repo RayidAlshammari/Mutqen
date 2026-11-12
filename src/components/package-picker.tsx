@@ -47,7 +47,7 @@ export function PackagePicker({ serviceId, packages, disabledReason }: { service
         {disabledReason ? (
           <p className="mt-5 rounded-xl bg-sand-100 p-3 text-center text-sm text-stone-600">{disabledReason}</p>
         ) : (
-          <Link href={`/order/new?service=${serviceId}&tier=${p.tier}`} className={buttonClass("primary", "lg", "mt-5 w-full")}>
+          <Link href={`/brief?service=${serviceId}&tier=${p.tier}`} className={buttonClass("primary", "lg", "mt-5 w-full")}>
             اطلب الباقة {p.name}
           </Link>
         )}

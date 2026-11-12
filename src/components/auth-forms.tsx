@@ -29,12 +29,14 @@ export function SignInForm({ next }: { next?: string }) {
 
 export function SignUpForm({ next, defaultRole = "buyer" }: { next?: string; defaultRole?: "buyer" | "seller" }) {
   const [state, action, pending] = useFormAction(signUpAction, undefined);
-  const [role, setRole] = useState<"buyer" | "seller">(defaultRole);
+  const ordering = Boolean(next && /^\/(order|brief)\b/.test(next));
+  const [role, setRole] = useState<"buyer" | "seller">(ordering ? "buyer" : defaultRole);
   return (
     <form onSubmit={action} className="space-y-4">
       <input type="hidden" name="next" value={next ?? ""} />
       <input type="hidden" name="role" value={role} />
-      <div>
+      {ordering && <p className="rounded-xl bg-brand-50 px-3.5 py-2.5 text-sm text-brand-900 ring-1 ring-brand-100">ملخص طلبك محفوظ. أنشئ حسابك وتكمل الدفع مباشرة.</p>}
+      <div className={ordering ? "hidden" : undefined}>
         <Label>أبي أسجل كـ</Label>
         <div className="grid grid-cols-2 gap-2">
           {(

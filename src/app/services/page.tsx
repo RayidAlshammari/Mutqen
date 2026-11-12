@@ -4,7 +4,7 @@ import { ServiceCard } from "@/components/service-card";
 import { listServices, type ServiceFilters } from "@/lib/queries";
 import { CATEGORIES, CATEGORY_KEYS, ALL_AI_TOOLS, AI_TOOLS } from "@/lib/constants";
 import type { Category } from "@/db/schema";
-import { num } from "@/lib/utils";
+import { arCount, COUNT, num } from "@/lib/utils";
 
 export const metadata = { title: "تصفح الخدمات" };
 export const dynamic = "force-dynamic";
@@ -105,13 +105,13 @@ export default async function ServicesPage({ searchParams }: { searchParams: Pro
         <div>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-brand-50 px-4 py-3 ring-1 ring-brand-100">
             <p className="text-sm text-brand-900">
-              مو متأكد وش تختار؟ <strong>اكتب احتياجك للمساعد الذكي</strong> وهو يرشح لك.
+              مو متأكد وش تختار؟ <strong>اكتب احتياجك بجملة</strong> ومتقن يرشّح لك ثلاثة مستقلين.
             </p>
-            <LinkButton href="/assistant" size="sm">
-              ✨ المساعد الذكي
+            <LinkButton href="/brief" size="sm">
+              رشّحوا لي
             </LinkButton>
           </div>
-          <p className="mb-3 text-sm text-stone-500">{num(services.length)} خدمة</p>
+          <p className="mb-3 text-sm text-stone-500">{arCount(services.length, COUNT.services)}</p>
           {services.length ? (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {services.map((s) => (
@@ -119,7 +119,7 @@ export default async function ServicesPage({ searchParams }: { searchParams: Pro
               ))}
             </div>
           ) : (
-            <EmptyState title="ما لقينا خدمات تطابق بحثك" text="جرّب توسّع الفلاتر، أو اكتب احتياجك للمساعد الذكي." action={<LinkButton href="/assistant">جرّب المساعد الذكي</LinkButton>} />
+            <EmptyState title="ما لقينا خدمات تطابق بحثك" text="جرّب توسّع الفلاتر، أو اكتب احتياجك ومتقن يرشّح لك." action={<LinkButton href="/brief">اكتب احتياجك</LinkButton>} />
           )}
         </div>
       </div>

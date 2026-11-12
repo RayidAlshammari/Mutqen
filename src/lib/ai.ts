@@ -13,7 +13,18 @@ export function aiConfigured() {
   return Boolean(process.env.AI_BASE_URL && process.env.AI_API_KEY && process.env.AI_MODEL);
 }
 
-async function chatJSON<T>(system: string, user: string): Promise<T | null> {
+/**
+ * Models occasionally leak characters from other scripts into Arabic output.
+ * Keep Arabic, Latin, digits and common punctuation; drop everything else.
+ */
+export const cleanText = (s: unknown, max = 600): string =>
+  String(s ?? "")
+    .replace(/[^\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFFa-zA-Z0-9\s.,،؛:!?؟()«»"'%+\-–—/@#&×*=_٪]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max);
+
+export async function chatJSON<T>(system: string, user: string): Promise<T | null> {
   if (!aiConfigured()) return null;
   const base = process.env.AI_BASE_URL!.replace(/\/+$/, "");
   const controller = new AbortController();
@@ -66,7 +77,7 @@ const KEYWORDS: Record<Category, string[]> = {
   code: ["موقع", "تطبيق", "برمجة", "بوت", "شات", "أتمتة", "اتمتة", "api", "متجر", "سلة", "زد", "n8n", "داشبورد", "نظام", "صفحة هبوط", "واتساب"],
 };
 
-function detectCategory(text: string): Category {
+export function detectCategory(text: string): Category {
   const t = text.toLowerCase();
   let best: Category = "content";
   let bestScore = 0;

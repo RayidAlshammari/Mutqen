@@ -30,7 +30,7 @@ export default async function Home() {
     categoryCounts(),
     user ? listOrdersForUser(user.id, "buyer") : Promise.resolve([]),
   ]);
-  const active = myOrders.filter((o) => ["in_progress", "revision_requested", "delivered"].includes(o.status)).slice(0, 3);
+  const active = myOrders.filter((o) => !["completed", "cancelled"].includes(o.status)).slice(0, 3);
 
   return (
     <>
@@ -70,7 +70,7 @@ export default async function Home() {
               {SUGGESTIONS.map((s) => (
                 <Link
                   key={s}
-                  href={`/assistant?q=${encodeURIComponent(s)}`}
+                  href={`/brief?q=${encodeURIComponent(s)}`}
                   className="rounded-full bg-white/10 px-3 py-1 text-sm text-brand-100 ring-1 ring-white/15 hover:bg-white/20"
                 >
                   {s}
@@ -118,7 +118,7 @@ export default async function Home() {
             <ul className="grid gap-2 md:grid-cols-3">
               {active.map((o) => (
                 <li key={o.id}>
-                  <Link href={`/orders/${o.id}`} className={`block rounded-xl p-3 ring-1 transition hover:bg-sand-50 ${o.status === "delivered" ? "bg-violet-50 ring-violet-200" : "ring-sand-200"}`}>
+                  <Link href={`/orders/${o.id}`} className={`block rounded-xl p-3 ring-1 transition hover:bg-sand-50 ${o.status === "delivered" || o.status === "sample_review" ? "bg-violet-50 ring-violet-200" : "ring-sand-200"}`}>
                     <p className="truncate text-sm font-semibold">{o.serviceTitle}</p>
                     <p className="mt-1 text-xs text-stone-600">{o.counterpartName} · {ORDER_STATUS[o.status].label}</p>
                   </Link>

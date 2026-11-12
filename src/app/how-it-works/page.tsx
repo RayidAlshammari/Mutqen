@@ -53,7 +53,7 @@ export default function HowItWorks() {
       </Card>
 
       <div className="mt-10 flex flex-wrap gap-3">
-        <LinkButton href="/assistant" size="lg">✨ ابدأ طلبك</LinkButton>
+        <LinkButton href="/brief" size="lg">✨ ابدأ طلبك</LinkButton>
         <LinkButton href="/signup?as=seller" size="lg" variant="secondary">انضم كمستقل</LinkButton>
       </div>
     </Container>
