@@ -287,3 +287,45 @@ export async function getBillingProfile(userId: string) {
 export async function recentWaitlist(limit = 20) {
   return db.select().from(schema.waitlist).orderBy(desc(schema.waitlist.createdAt)).limit(limit);
 }
+
+/** Orders past their deadline that are still with the freelancer. */
+export async function lateOrders(limit = 10) {
+  return db
+    .select({ id: order.id, status: order.status, dueAt: order.dueAt, serviceTitle: service.title, sellerName: user.name })
+    .from(order)
+    .innerJoin(service, eq(service.id, order.serviceId))
+    .innerJoin(user, eq(user.id, order.sellerId))
+    .where(and(inArray(order.status, ["in_progress", "revision_requested"]), sql`${order.dueAt} < now()`))
+    .orderBy(asc(order.dueAt))
+    .limit(limit);
+}
+
+export async function disputedOrders() {
+  return db
+    .select({ id: order.id, price: order.price, reason: order.disputeReason, serviceTitle: service.title, buyerName: user.name, createdAt: order.createdAt })
+    .from(order)
+    .innerJoin(service, eq(service.id, order.serviceId))
+    .innerJoin(user, eq(user.id, order.buyerId))
+    .where(eq(order.status, "disputed"))
+    .orderBy(asc(order.createdAt));
+}
+
+export async function managedRequests() {
+  const { managedRequest, brief } = schema;
+  return db
+    .select({ m: managedRequest, brief, buyerName: user.name })
+    .from(managedRequest)
+    .innerJoin(brief, eq(brief.id, managedRequest.briefId))
+    .innerJoin(user, eq(user.id, managedRequest.buyerId))
+    .where(inArray(managedRequest.status, ["new", "offered"]))
+    .orderBy(asc(managedRequest.createdAt));
+}
+
+export async function approvedSellers() {
+  return db
+    .select({ profile: sellerProfile, email: user.email })
+    .from(sellerProfile)
+    .innerJoin(user, eq(user.id, sellerProfile.userId))
+    .where(eq(sellerProfile.status, "approved"))
+    .orderBy(desc(sellerProfile.reviewedAt));
+}

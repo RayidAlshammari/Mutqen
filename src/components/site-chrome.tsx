@@ -67,6 +67,7 @@ export async function SiteHeader() {
                     <MenuLink href="/admin">لوحة الإدارة</MenuLink>
                     <MenuLink href="/admin/orders">كل الطلبات</MenuLink>
                     <MenuLink href="/admin/managed">الطلبات المُدارة</MenuLink>
+                    <MenuLink href="/admin/freelancers">المستقلون</MenuLink>
                   </>
                 ) : (
                   <>
