@@ -1,22 +1,21 @@
 import Link from "next/link";
-import { Container, LinkButton, Card, VerifiedBadge } from "@/components/ui";
+import { Container, LinkButton, Card } from "@/components/ui";
 import { ServiceCard } from "@/components/service-card";
-import { WaitlistForm } from "@/components/waitlist-form";
 import { heroSearchAction } from "@/app/actions/public";
 import { redirect } from "next/navigation";
 import { listServices, categoryCounts, listOrdersForUser } from "@/lib/queries";
 import { getCurrentUser } from "@/lib/session";
 import { ORDER_STATUS } from "@/lib/constants";
 import { CATEGORIES, CATEGORY_KEYS, FEES } from "@/lib/constants";
-import { num } from "@/lib/utils";
+import { arCount, COUNT, num } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 const SUGGESTIONS = [
-  "أبي 12 منشور انستقرام لمطعمي بلهجة سعودية",
-  "فيديو ريلز إعلاني لعطر جديد مدته 15 ثانية",
-  "شات بوت واتساب يرد على عملاء متجري",
-  "صفحة هبوط لإطلاق تطبيق",
+  "أبي شعار وهوية لمقهى مختص",
+  "أبي 12 منشور انستقرام لمحل حلويات قبل العيد",
+  "أبي شات بوت واتساب يرد على عملاء متجري",
+  "أبي صفحة هبوط لدورة تدريبية",
 ];
 
 export default async function Home() {
@@ -41,15 +40,15 @@ export default async function Home() {
         <Container className="relative grid gap-12 py-16 md:grid-cols-[1.2fr_1fr] md:py-24">
           <div>
             <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-sm ring-1 ring-white/20">
-              <span className="h-2 w-2 rounded-full bg-saffron-400" /> منصة العمل الحر للمتمكنين من الذكاء الاصطناعي
+              <span className="h-2 w-2 rounded-full bg-saffron-400" /> مستقلون موثّقون يشتغلون بالذكاء الاصطناعي
             </span>
             <h1 className="mt-6 text-4xl font-bold leading-[1.35] sm:text-5xl sm:leading-[1.3]">
-              شغلك يخلص في <span className="text-saffron-400">أيام، مو أسابيع</span>
+              قل وش تحتاج <span className="text-saffron-400">بجملة وحدة</span>
               <br />
-              على يد مستقلين يتقنون الذكاء الاصطناعي
+              والملخص والمستقل علينا
             </h1>
             <p className="mt-5 max-w-xl text-lg leading-8 text-brand-100">
-              محتوى، ميديا، وبرمجة — من مستقلين سعوديين اجتازوا اختبار متقن العملي في أدوات الذكاء الاصطناعي. ادفع بأمان، وما يوصل المبلغ للمستقل إلا بعد ما تستلم وترضى.
+              متقن يسألك أسئلة قصيرة، يكتب ملخص الطلب عنك، ويرشّح لك ثلاثة مستقلين في المحتوى والميديا والبرمجة اجتازوا اختباراً عملياً. تدفع السعر المعروض فقط، والمبلغ محجوز لين تعتمد التسليم.
             </p>
 
             <form action={heroSearchAction} className="mt-8 rounded-2xl bg-white p-2 shadow-xl">
@@ -60,10 +59,10 @@ export default async function Home() {
                 <input
                   id="hero-q"
                   name="q"
-                  placeholder="اكتب احتياجك بكلامك… والمساعد الذكي يرتبه ويرشح لك الأنسب"
+                  placeholder="مثال: أبي شعار وهوية لمقهى مختص بفتحه في حائل"
                   className="h-12 flex-1 rounded-xl px-4 text-[15px] text-ink placeholder:text-stone-400 focus:outline-none"
                 />
-                <button className="h-12 rounded-xl bg-saffron-500 px-6 font-semibold text-brand-950 hover:bg-saffron-400">✨ رتّب طلبي</button>
+                <button className="h-12 rounded-xl bg-saffron-500 px-6 font-semibold text-brand-950 hover:bg-saffron-400">ابدأ طلبي</button>
               </div>
             </form>
             <div className="mt-4 flex flex-wrap gap-2">
@@ -80,28 +79,30 @@ export default async function Home() {
           </div>
 
           <div className="hidden items-center md:flex">
-            <Card className="w-full rotate-[-2deg] p-5 text-ink shadow-2xl">
+            <Card className="w-full rotate-[-2deg] p-5 text-ink shadow-2xl" aria-label="مثال على ملخص طلب">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-stone-500">طلب #A21</span>
-                <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 ring-1 ring-emerald-200">تم التسليم خلال 31 ساعة</span>
+                <span className="text-sm font-semibold text-stone-500">مثال: ملخص طلب</span>
+                <span className="rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-semibold text-brand-800 ring-1 ring-brand-200">🎬 الميديا</span>
               </div>
-              <p className="mt-3 text-lg font-bold">محتوى انستقرام لشهر كامل — مقهى رَوْق</p>
-              <div className="mt-3 flex items-center gap-2 text-sm text-stone-600">
-                <span>نورة العتيبي</span> <VerifiedBadge small />
-              </div>
-              <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
-                {["ChatGPT", "Midjourney", "CapCut AI"].map((t) => (
-                  <span key={t} className="ltr rounded-lg bg-sand-100 py-2 font-semibold text-brand-900">
-                    {t}
-                  </span>
+              <p className="mt-3 text-lg font-bold">شعار وهوية بصرية لمقهى مختص</p>
+              <p className="mt-3 text-xs font-semibold text-stone-500">وش تستلم</p>
+              <ul className="mt-1 space-y-1 text-sm">
+                {["شعار بصيغ SVG و PNG", "لوحة ألوان وخطوط", "5 قوالب سوشال"].map((t) => (
+                  <li key={t} className="flex gap-2"><span className="text-brand-600">✓</span>{t}</li>
                 ))}
-              </div>
-              <div className="mt-4 rounded-xl bg-brand-50 p-3 text-sm leading-6 text-brand-900">
-                ”سلّمت 12 منشور مع الصور والكابشن، وعدّلت النبرة يدوياً عشان تناسب أهل حائل.“
-              </div>
-              <div className="mt-4 flex items-center justify-between text-sm">
-                <span className="text-stone-500">المبلغ محجوز لدى متقن</span>
-                <span className="font-bold text-brand-800">850 ر.س</span>
+              </ul>
+              <p className="mt-3 text-xs font-semibold text-stone-500">معايير القبول</p>
+              <ul className="mt-1 space-y-1 text-sm">
+                {["الشعار يُقرأ بوضوح بحجم 2 سم", "الألوان من اللوحة المعتمدة فقط"].map((t) => (
+                  <li key={t} className="flex gap-2"><span className="text-brand-600">◆</span>{t}</li>
+                ))}
+              </ul>
+              <div className="mt-4 flex items-center gap-2">
+                {["#6f4e37", "#c8a27c", "#f3e9dc"].map((c) => (
+                  <span key={c} className="h-6 w-6 rounded-full ring-1 ring-black/10" style={{ background: c }} />
+                ))}
+                <span className="rounded-full bg-sand-100 px-2.5 py-0.5 text-xs">عصري</span>
+                <span className="rounded-full bg-sand-100 px-2.5 py-0.5 text-xs">بسيط</span>
               </div>
             </Card>
           </div>
@@ -132,10 +133,10 @@ export default async function Home() {
       {/* ───────── Value props ───────── */}
       <Container className={`relative z-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 ${user && active.length > 0 ? "" : "-mt-8"}`}>
         {[
-          ["🧪", "مستقلون مختبَرون", "كل مستقل يجتاز مهمة عملية في أدوات الذكاء الاصطناعي قبل قبوله"],
-          ["⚡", "سرعة الذكاء الاصطناعي", "المهام الصغيرة تُسلَّم خلال 24–72 ساعة، والمشاريع في أيام بدل أسابيع"],
-          ["🔒", "دفع مضمون", "المبلغ محجوز لدى المنصة ولا يُحوَّل إلا بعد استلامك"],
-          ["🇸🇦", "محلي بالكامل", "عربي ولهجات، ودفع بالريال، ومستقلون محليون"],
+          ["📝", "ما تحتاج تعرف توصف", "جاوب على أسئلة قصيرة باختيارات، ومتقن يكتب ملخص الطلب ومعايير القبول عنك"],
+          ["🧪", "مستقلون مختبَرون", "كل مستقل ينفّذ مهمة عملية بأدوات الذكاء الاصطناعي ويراجعها فريقنا قبل قبوله"],
+          ["🎯", "عيّنة أولى قبل ما يكمل", "تعتمد الاتجاه من أول يوم، وتغييره مرة مشمول في السعر"],
+          ["🔒", "المبلغ محجوز لين تعتمد", "تدفع السعر المعروض فقط، وإذا ما قبل المستقل خلال 24 ساعة يرجع لك كامل"],
         ].map(([icon, title, text]) => (
           <Card key={title} className="p-5 shadow-sm">
             <p className="text-2xl">{icon}</p>
@@ -148,7 +149,7 @@ export default async function Home() {
       {/* ───────── Categories ───────── */}
       <Container className="mt-20">
         <h2 className="text-2xl font-bold text-brand-950 sm:text-3xl">ثلاث مجالات، ومستقلون متخصصون</h2>
-        <p className="mt-2 text-stone-600">اختر المجال، أو خلّ المساعد الذكي يحدده لك.</p>
+        <p className="mt-2 text-stone-600">اختر المجال، أو اكتب احتياجك ومتقن يحدده لك.</p>
         <div className="mt-8 grid gap-4 md:grid-cols-3">
           {CATEGORY_KEYS.map((c) => (
             <Link key={c} href={`/services?category=${c}`} className={`cover-${c} pattern-dots group relative overflow-hidden rounded-2xl p-6 text-white`}>
@@ -156,7 +157,7 @@ export default async function Home() {
               <p className="mt-4 text-2xl font-bold">{CATEGORIES[c].label}</p>
               <p className="mt-1 text-sm leading-6 text-white/85">{CATEGORIES[c].description}</p>
               <p className="mt-5 inline-flex items-center gap-1 text-sm font-semibold">
-                {num(counts[c] ?? 0)} خدمة <span className="transition group-hover:-translate-x-1">←</span>
+                {arCount(counts[c] ?? 0, COUNT.services)} <span className="transition group-hover:-translate-x-1">←</span>
               </p>
             </Link>
           ))}
@@ -168,17 +169,17 @@ export default async function Home() {
         <div className="grid gap-10 rounded-3xl bg-white p-8 ring-1 ring-sand-200 md:grid-cols-[1fr_2fr] md:p-12">
           <div>
             <h2 className="text-2xl font-bold text-brand-950 sm:text-3xl">كيف يشتغل متقن؟</h2>
-            <p className="mt-3 leading-7 text-stone-600">من الفكرة للتسليم في 4 خطوات، والمبلغ محفوظ طول الوقت.</p>
+            <p className="mt-3 leading-7 text-stone-600">من الجملة الأولى للتسليم في 4 خطوات، والمبلغ محفوظ طول الوقت.</p>
             <LinkButton href="/how-it-works" variant="secondary" className="mt-6">
               التفاصيل والرسوم
             </LinkButton>
           </div>
           <ol className="grid gap-6 sm:grid-cols-2">
             {[
-              ["اكتب احتياجك", "بكلامك العادي. المساعد الذكي يحوله لطلب واضح ويرشح لك أنسب الخدمات."],
-              ["اختر الباقة وادفع", "المبلغ يُحجز لدى متقن ولا يوصل للمستقل إلا بعد موافقتك. (الدفع تجريبي في هذي النسخة)"],
-              ["المستقل ينفذ", "بأدوات الذكاء الاصطناعي ومراجعته البشرية، وتتابع حالة طلبك لحظة بلحظة."],
-              ["استلم وقيّم", "راجع الشغل، اطلب تعديل إذا تحتاج، وبعد موافقتك يتحول المبلغ للمستقل."],
+              ["اكتب وش تحتاج بجملة", "متقن يسألك أسئلة قصيرة ويكتب ملخص فيه المخرجات ومعايير القبول."],
+              ["اختر من ثلاثة مرشحين", "بسجلهم الفعلي على المنصة ونماذج أعمالهم. أو خلّ متقن يدير الطلب عنك."],
+              ["ادفع السعر المعروض", "المبلغ ينحجز لدى متقن. المستقل يقبل خلال 24 ساعة ويرسل عيّنة أولى."],
+              ["اعتمد واستلم", "التعديل ضمن الملخص مشمول. بعد اعتمادك يتحوّل المبلغ للمستقل."],
             ].map(([t, d], i) => (
               <li key={t} className="flex gap-4">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-700 font-bold text-white">{num(i + 1)}</span>
@@ -224,11 +225,12 @@ export default async function Home() {
             </thead>
             <tbody className="divide-y divide-sand-100">
               {[
-                ["التحقق من المستقل", "اختبار عملي في أدوات الذكاء الاصطناعي + مراجعة بشرية", "تسجيل مفتوح لأي أحد"],
-                ["سرعة التسليم", "أيام بدل أسابيع بفضل أدوات الذكاء الاصطناعي", "تختلف كثيراً"],
-                ["السعر", "اللي تشوفه هو اللي تدفعه — بدون رسوم عند الدفع", "رسوم خدمة تنضاف في آخر خطوة"],
-                ["الدفع", "بالريال، ومدى وApple Pay عند الإطلاق", "غالباً بالدولار وبطاقات دولية"],
-                ["اللغة والسياق", "عربي ولهجات، ومراعاة أنظمة المحتوى السعودية", "عام وعالمي"],
+                ["وصف الطلب", "أسئلة قصيرة باختيارات، ومتقن يكتب الملخص عنك", "تكتب الوصف بنفسك من صفحة فاضية"],
+                ["اختيار المستقل", "ثلاثة مرشحين بسجلهم الفعلي، أو متقن يختار عنك", "تفاضل بين عشرات العروض"],
+                ["التحقق من المستقل", "مهمة عملية بأدوات الذكاء الاصطناعي + مراجعة بشرية", "تسجيل مفتوح أو اختبار نظري"],
+                ["السعر", "اللي تشوفه هو اللي تدفعه", "رسوم خدمة تنضاف في آخر خطوة"],
+                ["التعديلات", "عيّنة أولى ومعايير قبول تحدد المشمول والإضافي", "خلاف على وش داخل السعر"],
+                ["الدفع واللغة", "بالريال، وعربي بلهجاته", "غالباً بالدولار"],
               ].map(([k, a, b]) => (
                 <tr key={k}>
                   <td className="p-4 font-semibold text-brand-950">{k}</td>
@@ -248,14 +250,14 @@ export default async function Home() {
           <div>
             <h2 className="text-2xl font-bold text-brand-950 sm:text-3xl">تتقن أدوات الذكاء الاصطناعي؟ حوّلها لدخل</h2>
             <p className="mt-3 leading-7 text-stone-700">
-              اجتز مهمة عملية قصيرة، واحصل على شارة <strong>موثّق AI</strong>، وابدأ تستقبل طلبات من شركات وأفراد في السعودية — بعمولة {num(FEES.commissionRate * 100)}٪ تنزل إلى {num(FEES.repeatCommissionRate * 100)}٪ مع العميل المتكرر.
+              اجتز مهمة عملية قصيرة، واحصل على شارة <strong>موثّق AI</strong>، واستقبل طلبات جاهزة بملخص ومعايير قبول واضحة. عمولة {num(FEES.commissionRate * 100)}٪ تنزل إلى {num(FEES.repeatCommissionRate * 100)}٪ مع العميل المتكرر.
             </p>
             <LinkButton href="/signup?as=seller" className="mt-6">
               انضم كمستقل
             </LinkButton>
           </div>
           <ul className="space-y-3 text-[15px]">
-            {["سجّل وأضف أدواتك وأعمالك", "حل مهمة التحقق العملية (15–20 دقيقة)", "فريق متقن يراجع ويوثّق ملفك", "أضف خدماتك وباقاتك واستقبل الطلبات"].map((s, i) => (
+            {["سجّل وعبّي ملفك من سيرتك الذاتية", "نفّذ مهمة عملية صغيرة وارفع ناتجها", "فريق متقن يراجع شغلك ويوثّق ملفك", "أضف خدماتك واستقبل طلبات بملخص واضح"].map((s, i) => (
               <li key={s} className="flex items-center gap-3 rounded-xl bg-white p-3 ring-1 ring-sand-200">
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-800">{num(i + 1)}</span>
                 {s}
@@ -266,21 +268,6 @@ export default async function Home() {
       </Container>
       )}
 
-      {/* ───────── Waitlist ───────── */}
-      {!user && (
-      <Container className="mt-20">
-        <div className="relative overflow-hidden rounded-3xl bg-brand-800 px-6 py-12 text-center text-white md:px-16">
-          <div className="pattern-dots absolute inset-0" aria-hidden />
-          <div className="relative mx-auto max-w-xl">
-            <h2 className="text-2xl font-bold sm:text-3xl">الإطلاق التجريبي قريب</h2>
-            <p className="mt-3 text-brand-100">سجّل بريدك وكن من أول المستخدمين — عملاء ومستقلين.</p>
-            <div className="mt-6">
-              <WaitlistForm />
-            </div>
-          </div>
-        </div>
-      </Container>
-      )}
     </>
   );
 }
