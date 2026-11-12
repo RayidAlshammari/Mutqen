@@ -256,7 +256,7 @@ export const order = pgTable(
       .references(() => user.id),
     packageTier: text("package_tier").notNull(),
     packageName: text("package_name").notNull(),
-    // money in SAR (integers, halalas not needed for MVP)
+    // money in whole SAR
     price: integer("price").notNull(),
     buyerFee: integer("buyer_fee").notNull(),
     platformCommission: integer("platform_commission").notNull(),

@@ -91,14 +91,15 @@ let lastSweep = 0;
 
 /**
  * Nobody's money or time may hang on someone who stopped answering. Runs lazily
- * (at most once a minute per server instance) whenever order data is read:
+ * (at most once a minute per server instance) whenever order data is read, and from
+ * the scheduled job at /api/cron/sweep so it also happens when nobody is browsing:
  *  - a freelancer who doesn't accept in time → full refund to the client
  *  - a sample left unreviewed → the direction is approved so work continues
  *  - a delivery left unreviewed → the order completes and the freelancer is paid
  * Disputed orders are never touched: their timers are paused until the admin decides.
  */
-export async function sweepStaleOrders() {
-  if (Date.now() - lastSweep < 60_000) return;
+export async function sweepStaleOrders(force = false) {
+  if (!force && Date.now() - lastSweep < 60_000) return;
   lastSweep = Date.now();
   const now = new Date();
   const cutoff = new Date(Date.now() - AUTO_COMPLETE_DAYS * DAY);
@@ -113,5 +114,4 @@ export async function sweepStaleOrders() {
   for (const { id } of delivered) await completeOrder(id, null, `اكتمل الطلب تلقائياً لعدم وجود رد خلال ${AUTO_COMPLETE_DAYS} أيام من التسليم.`);
 }
 
-/** @deprecated kept for existing imports */
-export const autoCompleteStaleOrders = sweepStaleOrders;
+export const autoCompleteStaleOrders = () => sweepStaleOrders();

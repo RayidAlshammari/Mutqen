@@ -25,6 +25,14 @@ const globalForDb = globalThis as unknown as { __mutqenDb?: Db };
 // One instance per process: Next.js may load this module from several bundles
 // (pages, server actions, route handlers). PGlite in particular must never be opened twice.
 // Both drivers expose the same query API; we type against the postgres-js variant.
-export const db: Db = (globalForDb.__mutqenDb ??= createDb() as unknown as Db);
+// The connection opens on first use, not on import: build and dev workers import route
+// modules without ever running a query, and must not open the embedded database.
+export const db: Db = new Proxy({} as Db, {
+  get(_target, prop) {
+    const real = (globalForDb.__mutqenDb ??= createDb() as unknown as Db);
+    const value = Reflect.get(real as object, prop, real);
+    return typeof value === "function" ? value.bind(real) : value;
+  },
+});
 
 export { schema };

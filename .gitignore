@@ -47,5 +47,4 @@ next-env.d.ts
 .pglite-e2e
 /playwright-report
 /blob-report
-.pglite-dev
 *.tmp.mjs
