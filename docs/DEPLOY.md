@@ -1,104 +1,64 @@
-# دليل النشر — متقن
+# دليل النشر والإطلاق — متقن
 
-الهدف: رابط حي على Vercel، وقاعدة بيانات Postgres مجانية (Neon أو Supabase). الوقت المتوقع 20 إلى 30 دقيقة.
+## 1) قاعدة البيانات
 
-## 0) جرّبه على جهازك أولاً
-
-```bash
-npm install
-cp .env.example .env
-```
-
-افتح `.env` وضع قيمة لـ `BETTER_AUTH_SECRET`. تقدر تولدها بهذا الأمر:
+1. أنشئ مشروع Postgres على Neon (منطقة Frankfurt) أو Supabase (Transaction pooler، المنفذ 6543).
+2. من جهازك، والرابط في `.env` مؤقتاً (`DATABASE_URL=...`):
 
 ```bash
-openssl rand -base64 32
-```
-
-وإذا ما عندك openssl:
-
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-```
-
-بعدها شغّل:
-
-```bash
+npm ci
 npm run db:migrate
-npm run db:seed
-npm run dev
 ```
 
-افتح http://localhost:3000 وسجل دخول بـ `buyer@mutqen.demo` وكلمة المرور `local-dev-only`.
+`db:migrate` آمن على قاعدة فيها بيانات: يضيف الجداول والأعمدة الجديدة فقط.
 
-## 1) ارفع الكود على GitHub
+## 2) Vercel
+
+1. **Add New Project** ← اختر المستودع والفرع.
+2. **Environment Variables**:
+
+| المتغير | القيمة | إلزامي |
+|---|---|---|
+| `DATABASE_URL` | رابط قاعدة البيانات | نعم |
+| `BETTER_AUTH_SECRET` | `openssl rand -base64 32` | نعم |
+| `BETTER_AUTH_URL` | رابط الموقع النهائي، مثل `https://mutqen.vercel.app` | نعم |
+| `CRON_SECRET` | نص عشوائي للمهمة المجدولة | نعم |
+| `AI_BASE_URL` `AI_API_KEY` `AI_MODEL` | مزوّد النموذج اللغوي | للملخص والتقييم بالذكاء الاصطناعي |
+| `RESEND_API_KEY` `EMAIL_FROM` | حساب Resend ونطاق موثّق | لبريد الإشعارات واستعادة كلمة المرور |
+| `SUPPORT_EMAIL` | بريد الدعم | يظهر في صفحتي الشروط والخصوصية |
+| `AUTHENTICA_API_KEY` | حساب Authentica | لتوثيق الجوال برسالة |
+| `PAYMENT_PROVIDER` `PAYMENT_SECRET_KEY` | حساب التاجر | للدفع الحقيقي (انظر 4) |
+
+3. **Storage** ← **Create** ← **Blob** واربطه بالمشروع. يضيف `BLOB_READ_WRITE_TOKEN` تلقائياً ويفعّل رفع الملفات.
+4. **Deploy**. منطقة التشغيل (`fra1`) والمهمة المجدولة اليومية معرّفتان في `vercel.json`.
+
+> إذا اختلف الرابط النهائي عن `BETTER_AUTH_URL`، عدّل المتغير وأعد النشر. تسجيل الدخول يعتمد على تطابقه.
+
+## 3) بيئة تجربة ببيانات عرض (اختياري)
+
+لبيئة يجرّب فيها الفريق قبل الإطلاق:
 
 ```bash
-git add -A
-git commit -m "Mutqen MVP"
-git branch -M main
-git remote add origin https://github.com/<حسابك>/mutqen.git
-git push -u origin main
+SEED_PASSWORD='...' SEED_ADMIN_PASSWORD='...' npm run db:seed
 ```
 
-لا ترفع ملف `.env`. هو مستثنى أصلاً في `.gitignore`.
+وأضف `DEMO_MODE=1` في متغيرات تلك البيئة ليظهر شريط «بيئة تجربة».
 
-## 2) قاعدة البيانات
+`npm run db:seed -- --reset --wipe-hosted` يمسح **كل** الحسابات والطلبات ثم يعيد بيانات العرض. لا تستخدمه على قاعدة فيها مستخدمون حقيقيون.
 
-### الخيار أ: Neon (الأسهل مع Vercel)
-1. ادخل neon.tech وأنشئ مشروع جديد. اختر أقرب منطقة، مثل Frankfurt.
-2. انسخ **Connection string**. شكله كذا: `postgresql://user:pass@ep-xxx.eu-central-1.aws.neon.tech/neondb?sslmode=require`
+## 4) قبل الإطلاق الفعلي
 
-### الخيار ب: Supabase
-1. أنشئ مشروع، وروح لـ **Connect** ← **Transaction pooler**.
-2. انسخ الرابط اللي على المنفذ **6543**. الكود مضبوط أصلاً على `prepare: false` عشان يشتغل مع الـ pooler.
+- [ ] قاعدة بيانات جديدة فاضية (`db:migrate` فقط)، بدون `DEMO_MODE`.
+- [ ] حساب المدير: سجّل حساباً عادياً ثم غيّر دوره مرة واحدة من قاعدة البيانات: `update "user" set role = 'admin' where email = '...'`.
+- [ ] بوابة الدفع: حساب تاجر لدى مزوّد مرخّص، وربطه في `src/lib/payments.ts` (حجز عند الطلب، وتحصيل عند الاعتماد، واسترداد عند الإلغاء). بدون المفاتيح يبقى الدفع في وضع الاختبار.
+- [ ] بريد من نطاق المنصة موثّق في Resend.
+- [ ] مراجعة قانونية لصفحتي `/terms` و`/privacy`.
+- [ ] مستقلون حقيقيون موثّقون في كل مجال قبل فتح التسجيل للعملاء.
 
-### جهّز الجداول والبيانات التجريبية
-1. حط الرابط مؤقتاً في `.env` على جهازك: `DATABASE_URL=...`
-2. شغّل:
+## 5) فحص بعد النشر
 
-```bash
-npm run db:migrate
-npm run db:seed
-```
-
-3. بعدها رجّع `DATABASE_URL` فاضي في `.env` المحلي إذا تبي تكمل تطوير على القاعدة المحلية.
-
-## 3) Vercel
-1. ادخل vercel.com ← **Add New Project** ← اختر مستودع `mutqen`.
-2. في **Environment Variables** أضف:
-
-| المتغير | القيمة |
-|---|---|
-| `DATABASE_URL` | رابط Neon أو Supabase |
-| `BETTER_AUTH_SECRET` | نفس السر اللي ولدته، أو سر جديد |
-| `BETTER_AUTH_URL` | رابط الموقع النهائي، مثل `https://mutqen.vercel.app` |
-| `AI_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta/openai/` |
-| `AI_API_KEY` | مفتاح Gemini من Google AI Studio |
-| `AI_MODEL` | `gemini-3.5-flash-lite` |
-| `AUTHENTICA_API_KEY` | اختياري |
-
-3. اضغط **Deploy**.
-4. إذا طلع الرابط مختلف عن اللي كتبته في `BETTER_AUTH_URL`، عدّل المتغير وسوِّ **Redeploy**. تسجيل الدخول يعتمد على أن الرابط يطابق.
-
-> **مهم:** على Vercel لازم يكون `DATABASE_URL` موجود. القاعدة المدمجة (PGlite) للتطوير المحلي فقط.
-
-> روابط المعاينة (Preview) تختلف عن الرابط الأساسي، فتسجيل الدخول فيها ممكن يفشل. استخدم رابط Production في العرض.
-
-## 4) قائمة فحص بعد النشر
-- [ ] الرئيسية تفتح، والخدمات تظهر.
-- [ ] المساعد الذكي يرجع طلب منظم، وتظهر شارة **"بالذكاء الاصطناعي"** بدل "وضع بدون اتصال".
-- [ ] تسجيل عميل جديد، ثم طلب ودفع تجريبي، ثم تظهر صفحة الطلب.
-- [ ] دخول `seller@mutqen.demo`، ثم تسليم الطلب.
-- [ ] العميل يوافق ويقيّم.
-- [ ] دخول `admin@mutqen.demo`، والأرقام تتحدث.
-- [ ] جرّب الموقع على الجوال.
-
-## مشاكل شائعة
-
-| المشكلة | الحل |
-|---|---|
-| تسجيل الدخول يرجعك لصفحة الدخول | تأكد إن `BETTER_AUTH_URL` يطابق رابط الموقع حرفياً، مع `https://`، وبدون `/` في الآخر |
-| خطأ اتصال بقاعدة البيانات | تأكد من الرابط ومن وجود `sslmode=require` في Neon، أو إنك تستخدم منفذ 6543 في Supabase |
-| المساعد يظهر "وضع بدون اتصال" | راجع متغيرات `AI_*` الثلاثة، وسوِّ Redeploy بعد التعديل |
-| تبي تعيد البيانات التجريبية من البداية | شغّل `npm run db:reset` مع رابط القاعدة في `.env` |
+- [ ] `/brief`: جملة ← أسئلة ← ملخص ← ثلاثة مرشحين.
+- [ ] تسجيل عند الدفع، ثم الطلب «بانتظار قبول المستقل».
+- [ ] المستقل يقبل ويرسل عيّنة، والعميل يوصله إشعار في الجرس.
+- [ ] `/dashboard/settings` بحساب المدير: حالة الربط مع كل خدمة.
+- [ ] `/admin`: الخلافات والطلبات المُدارة والتوثيق.
