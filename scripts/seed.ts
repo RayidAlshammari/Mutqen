@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 /**
  * Demo data for the MVP. Usage:
  *   npm run db:seed            (refuses if data exists)
@@ -12,7 +13,12 @@ import type { Category, ServicePackage, OrderStatus } from "../src/db/schema";
 import { computeFees } from "../src/lib/constants";
 import { newId } from "../src/lib/id";
 
-const DEMO_PASSWORD = "Mutqen2026!";
+// Passwords never live in the repository. Against a real database they must come from the
+// environment; if they are missing, random ones are generated and printed once.
+const hosted = Boolean(process.env.DATABASE_URL);
+const randomPassword = () => randomBytes(12).toString("base64url");
+const DEMO_PASSWORD = process.env.SEED_PASSWORD ?? (hosted ? randomPassword() : "local-dev-only");
+const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? (hosted ? randomPassword() : DEMO_PASSWORD);
 const DAY = 24 * 3600 * 1000;
 const ago = (days: number, hours = 0) => new Date(Date.now() - days * DAY - hours * 3600 * 1000);
 
@@ -323,14 +329,14 @@ async function main() {
 
   const hash = await hashPassword(DEMO_PASSWORD);
   const now = new Date();
-  const createUser = async (name: string, email: string, role: "buyer" | "seller" | "admin", createdAt = ago(60)) => {
+  const createUser = async (name: string, email: string, role: "buyer" | "seller" | "admin", createdAt = ago(60), password = hash) => {
     const id = newId("u_");
     await db.insert(schema.user).values({ id, name, email, role, emailVerified: true, createdAt, updatedAt: now });
-    await db.insert(schema.account).values({ id: newId("a_"), accountId: id, providerId: "credential", userId: id, password: hash, createdAt, updatedAt: now });
+    await db.insert(schema.account).values({ id: newId("a_"), accountId: id, providerId: "credential", userId: id, password, createdAt, updatedAt: now });
     return id;
   };
 
-  await createUser("إدارة متقن", "admin@mutqen.demo", "admin");
+  await createUser("إدارة متقن", "admin@mutqen.demo", "admin", ago(60), await hashPassword(ADMIN_PASSWORD));
 
   const buyerIds: string[] = [];
   for (const b of BUYERS) buyerIds.push(await createUser(b.name, b.email, "buyer", ago(40 + Math.floor(rand() * 20))));
@@ -424,7 +430,7 @@ async function main() {
       packageTier: pkg.tier,
       packageName: pkg.name,
       price: fees.price,
-      buyerFee: fees.buyerFee,
+      buyerFee: 0,
       platformCommission: fees.platformCommission,
       sellerEarning: fees.sellerEarning,
       brief,
@@ -471,7 +477,8 @@ async function main() {
     await db.insert(schema.waitlist).values({ id: newId("w_"), email, side });
 
   console.log(`✓ Seeded: ${SELLERS.length + 1} freelancers, ${services.length} services, ${plan.length} orders.`);
-  console.log(`  Demo logins (password ${DEMO_PASSWORD}): admin@mutqen.demo · buyer@mutqen.demo · seller@mutqen.demo · pending@mutqen.demo`);
+  console.log(`  Demo accounts: buyer@mutqen.demo · seller@mutqen.demo · pending@mutqen.demo — password: ${process.env.SEED_PASSWORD ? "(from SEED_PASSWORD)" : DEMO_PASSWORD}`);
+  console.log(`  Admin account: admin@mutqen.demo — password: ${process.env.SEED_ADMIN_PASSWORD ? "(from SEED_ADMIN_PASSWORD)" : ADMIN_PASSWORD}`);
 }
 
 main()

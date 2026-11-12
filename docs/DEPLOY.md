@@ -29,7 +29,7 @@ npm run db:seed
 npm run dev
 ```
 
-افتح http://localhost:3000 وسجل دخول بـ `buyer@mutqen.demo` وكلمة المرور `Mutqen2026!`.
+افتح http://localhost:3000 وسجل دخول بـ `buyer@mutqen.demo` وكلمة المرور `local-dev-only`.
 
 ## 1) ارفع الكود على GitHub
 

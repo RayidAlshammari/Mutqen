@@ -31,4 +31,5 @@ export const LIMITS = {
   assistantUser: { limit: 30, window: 3600 }, // per account per hour
   verification: { limit: 3, window: 3600 }, // AI grading attempts per seller per hour
   waitlist: { limit: 10, window: 3600 }, // per IP per hour
+  orders: { limit: 10, window: 3600 }, // new orders per account per hour
 };

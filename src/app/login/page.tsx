@@ -3,12 +3,13 @@ import { redirect } from "next/navigation";
 import { SignInForm } from "@/components/auth-forms";
 import { Card, Container } from "@/components/ui";
 import { getCurrentUser } from "@/lib/session";
+import { safeNextPath } from "@/lib/validation";
 
 export const metadata = { title: "تسجيل الدخول" };
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   const { next } = await searchParams;
-  if (await getCurrentUser()) redirect(next ?? "/dashboard");
+  if (await getCurrentUser()) redirect(safeNextPath(next) ?? "/dashboard");
   return (
     <Container className="flex justify-center py-16">
       <Card className="w-full max-w-md p-8">

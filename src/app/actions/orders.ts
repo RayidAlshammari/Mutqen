@@ -10,6 +10,7 @@ import { requireUser } from "@/lib/session";
 import { computeFees } from "@/lib/constants";
 import { newId } from "@/lib/id";
 import { httpUrl } from "@/lib/validation";
+import { hit, LIMITS } from "@/lib/rate-limit";
 import { completeOrder } from "@/lib/order-lifecycle";
 
 const { order, orderEvent, service, review, sellerProfile } = schema;
@@ -27,8 +28,22 @@ const createSchema = z.object({
   agree: z.literal("on", { message: "لازم توافق على شروط الضمان المالي" }),
 });
 
+const short = (max: number) => z.string().trim().max(max);
+const structuredBriefSchema = z.object({
+  title: short(200),
+  category: z.enum(["content", "media", "code"]),
+  goal: short(1000),
+  deliverables: z.array(short(300)).max(20),
+  audience: short(500).optional(),
+  tone: short(300).optional(),
+  timeline: short(200).optional(),
+  budgetHint: short(200).optional(),
+});
+
 export async function createOrderAction(_: ActionState, formData: FormData): Promise<ActionState> {
   const user = await requireUser();
+  const rl = await hit(`orders:${user.id}`, LIMITS.orders.limit, LIMITS.orders.window);
+  if (!rl.ok) return { error: "أنشأت طلبات كثيرة خلال ساعة. حاول بعد شوي." };
   const parsed = createSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   const { serviceId, tier, brief, paymentMethod } = parsed.data;
@@ -46,14 +61,21 @@ export async function createOrderAction(_: ActionState, formData: FormData): Pro
 
   let structured: StructuredBrief | null = null;
   if (parsed.data.structuredBrief) {
+    // The brief travels through the URL, so it is untrusted input: keep only a well-formed one.
     try {
-      structured = JSON.parse(parsed.data.structuredBrief) as StructuredBrief;
+      const checked = structuredBriefSchema.safeParse(JSON.parse(parsed.data.structuredBrief));
+      structured = checked.success ? (checked.data as StructuredBrief) : null;
     } catch {
       structured = null;
     }
   }
 
-  const fees = computeFees(pkg.price);
+  // Repeat work with the same client earns the freelancer a lower commission.
+  const [{ n: completedTogether }] = await db
+    .select({ n: count() })
+    .from(order)
+    .where(and(eq(order.buyerId, user.id), eq(order.sellerId, row.s.sellerId), eq(order.status, "completed")));
+  const fees = computeFees(pkg.price, Number(completedTogether));
   const id = newId("o_");
   const paymentRef = `TEST-${paymentMethod.toUpperCase()}-${newId().slice(0, 8)}`;
   const due = new Date(Date.now() + pkg.deliveryDays * 24 * 3600 * 1000);
@@ -67,7 +89,7 @@ export async function createOrderAction(_: ActionState, formData: FormData): Pro
       packageTier: pkg.tier,
       packageName: pkg.name,
       price: fees.price,
-      buyerFee: fees.buyerFee,
+      buyerFee: 0,
       platformCommission: fees.platformCommission,
       sellerEarning: fees.sellerEarning,
       brief,
