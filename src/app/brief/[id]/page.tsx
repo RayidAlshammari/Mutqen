@@ -134,6 +134,15 @@ export default async function BriefPage({ params }: { params: Promise<{ id: stri
   const offer = managed?.status === "offered" && managed.offeredServiceId ? await getService(managed.offeredServiceId) : null;
   const offerPkg = offer?.service.packages.find((p) => p.tier === managed?.offeredTier);
   const recs = b.status === "ready" ? await recommendFor(sb, { excludeUserId: user?.id, pinServiceId: b.serviceId }) : [];
+  // Price and time come from the recommended packages, so the estimate never contradicts the offers below it.
+  const pkgs = recs.flatMap((r) => r.service.packages);
+  const shown = pkgs.length
+    ? {
+        ...sb,
+        budgetHint: span(pkgs.map((p) => p.price), "ر.س"),
+        timeline: span(pkgs.map((p) => p.deliveryDays), "أيام"),
+      }
+    : sb;
 
   return (
     <Container className="max-w-4xl py-10">
@@ -151,7 +160,7 @@ export default async function BriefPage({ params }: { params: Promise<{ id: stri
       </div>
 
       <Card className="p-5 sm:p-7">
-        <BriefCard b={sb} />
+        <BriefCard b={shown} />
         {b.status === "ready" && (
           <div className="mt-5 border-t border-sand-200 pt-4">
             <SummaryEditor briefId={id} b={sb} />
@@ -230,4 +239,11 @@ export default async function BriefPage({ params }: { params: Promise<{ id: stri
       )}
     </Container>
   );
+}
+
+function span(values: number[], unit: string) {
+  const lo = Math.min(...values);
+  const hi = Math.max(...values);
+  const f = (n: number) => n.toLocaleString("ar-SA");
+  return lo === hi ? `${f(lo)} ${unit}` : `${f(lo)} إلى ${f(hi)} ${unit}`;
 }
