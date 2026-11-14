@@ -23,7 +23,7 @@ export default async function ServicePage({ params }: { params: Promise<{ id: st
   const { service: s, seller, reviews } = data;
   const isOwner = user?.id === s.sellerId;
   const record = (await sellerRecords([s.sellerId], s.category)).get(s.sellerId)!;
-  const facts = recordLines(record, CATEGORIES[s.category].label);
+  const facts = recordLines(record, CATEGORIES[s.category].label, seller.gender);
   const shots = seller.portfolio.filter((p) => p.image).slice(0, 3);
   const disabledReason = isOwner ? "هذي خدمتك — العملاء يشوفون زر الطلب هنا." : seller.status !== "approved" ? "المستقل غير موثّق حالياً." : undefined;
 

@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 
 type Defaults = {
   displayName?: string;
+  gender?: "m" | "f";
   headline?: string;
   bio?: string;
   city?: string | null;
@@ -194,6 +195,14 @@ export function ProfileFields({ defaults, categories, tools, cities, title, uplo
         <div>
           <Label htmlFor="displayName">الاسم الظاهر للعملاء</Label>
           <Input id="displayName" name="displayName" required defaultValue={defaults.displayName} />
+          <div className="mt-2 flex gap-4 text-sm" role="radiogroup" aria-label="تظهر للعملاء كـ">
+            <label className="flex items-center gap-1.5">
+              <input type="radio" name="gender" value="m" defaultChecked={defaults.gender !== "f"} className="accent-brand-700" /> مستقل
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input type="radio" name="gender" value="f" defaultChecked={defaults.gender === "f"} className="accent-brand-700" /> مستقلة
+            </label>
+          </div>
         </div>
         <div>
           <Label htmlFor="headline">تخصصك بسطر</Label>

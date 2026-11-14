@@ -16,9 +16,21 @@ export type SellerRecord = {
   repeatClients: number;
 };
 
+export type Gender = "m" | "f";
+
+/** Arabic verbs and pronouns that follow the freelancer's gender. */
+export const g = (gender: Gender | null | undefined, m: string, f: string) => (gender === "f" ? f : m);
+
+/**
+ * Minimum bar to be recommended. A freelancer with a record must keep it; a new one may be
+ * shown, marked as new, because every marketplace needs a way in for good newcomers.
+ */
+export const RECOMMEND_FLOOR = { onTimeRate: 0.8, rating: 4, minHits: 2, recordFrom: 2 };
+
 export type Recommendation = {
   sellerId: string;
   sellerName: string;
+  gender: Gender;
   headline: string;
   city: string | null;
   portfolio: PortfolioItem[];
@@ -29,7 +41,11 @@ export type Recommendation = {
   score: number;
 };
 
-const STOP = new Set(["في", "من", "على", "الى", "إلى", "عن", "مع", "او", "أو", "ابي", "أبي", "ابغى", "أبغى", "احتاج", "أحتاج", "لي", "عندي", "هذا", "هذي", "اللي", "وش", "كل", "بدون", "جاهزة", "جاهز", "واحد"]);
+const STOP = new Set([
+  "في", "من", "على", "الى", "إلى", "عن", "مع", "او", "أو", "ابي", "أبي", "ابغى", "أبغى", "احتاج", "أحتاج", "لي", "عندي", "هذا", "هذي", "اللي", "وش", "كل", "بدون", "جاهزة", "جاهز", "واحد",
+  // Words every request and every service share; they say nothing about fit.
+  "محتوى", "خدمة", "طلب", "عمل", "شغل", "جديد", "جديدة", "احترافي", "احترافية", "سعودي", "سعودية", "عربي", "عربية", "عملاء", "عملاؤنا", "عملاؤه", "زيادة", "اقتراح", "متقن", "تعدله", "تقدر", "ادري", "أدري", "اقترحوا", "علي",
+]);
 
 export function keywordsOf(text: string): string[] {
   const words = text
@@ -81,19 +97,32 @@ export async function sellerRecords(sellerIds: string[], category?: Category): P
   return out;
 }
 
-export function recordLines(rec: SellerRecord, categoryLabel?: string): string[] {
+export function recordLines(rec: SellerRecord, categoryLabel?: string, gender: Gender = "m"): string[] {
   const lines: string[] = [];
-  if (rec.similar > 0 && categoryLabel) lines.push(`أنجز ${arCount(rec.similar, COUNT.orders)} في ${categoryLabel} على متقن`);
-  else if (rec.completed > 0) lines.push(`أنجز ${arCount(rec.completed, COUNT.orders)} على متقن`);
-  if (rec.onTimeRate !== null && rec.completed >= 2) lines.push(`سلّم ${num(Math.round(rec.onTimeRate * 100))}٪ من طلباته في الموعد`);
-  if (rec.acceptHours !== null) lines.push(rec.acceptHours < 1 ? "يقبل الطلبات خلال أقل من ساعة" : `يقبل الطلبات خلال ${arCount(Math.max(1, Math.round(rec.acceptHours)), COUNT.hours)} تقريباً`);
-  if (rec.repeatClients > 0) lines.push(`${arCount(rec.repeatClients, COUNT.clients)} رجعوا وطلبوا منه مرة ثانية`);
+  const did = g(gender, "أنجز", "أنجزت");
+  if (rec.similar > 0 && categoryLabel) lines.push(`${did} ${arCount(rec.similar, COUNT.orders)} في ${categoryLabel} على متقن`);
+  else if (rec.completed > 0) lines.push(`${did} ${arCount(rec.completed, COUNT.orders)} على متقن`);
+  if (rec.onTimeRate !== null && rec.completed >= 2) lines.push(`${g(gender, "سلّم", "سلّمت")} ${num(Math.round(rec.onTimeRate * 100))}٪ من ${g(gender, "طلباته", "طلباتها")} في الموعد`);
+  if (rec.acceptHours !== null) {
+    const accepts = g(gender, "يقبل", "تقبل");
+    lines.push(rec.acceptHours < 1 ? `${accepts} الطلبات خلال أقل من ساعة` : `${accepts} الطلبات خلال ${arCount(Math.max(1, Math.round(rec.acceptHours)), COUNT.hours)} تقريباً`);
+  }
+  if (rec.repeatClients > 0) lines.push(`${arCount(rec.repeatClients, COUNT.clients)} رجعوا وطلبوا ${g(gender, "منه", "منها")} مرة ثانية`);
   return lines;
 }
 
+/** Passes the quality bar: no record yet, or a record that keeps its promises. */
+export function meetsFloor(rec: SellerRecord) {
+  if (rec.completed < RECOMMEND_FLOOR.recordFrom) return true;
+  if (rec.onTimeRate !== null && rec.onTimeRate < RECOMMEND_FLOOR.onTimeRate) return false;
+  if (rec.ratingCount > 0 && rec.rating < RECOMMEND_FLOOR.rating) return false;
+  return true;
+}
+
 /**
- * The three freelancers Mutqen would pick for this brief. Ranking uses how well the service
- * fits the request and what the freelancer has delivered on the platform, in that order.
+ * Up to three freelancers Mutqen would pick for this brief. Only services that fit the request
+ * and freelancers above the quality bar are shown: one strong match beats three padded ones.
+ * Ranking uses fit first, then the record on the platform.
  */
 export async function recommendFor(b: StructuredBrief, opts: { excludeUserId?: string; pinServiceId?: string | null; limit?: number } = {}): Promise<Recommendation[]> {
   const rows = await db
@@ -104,7 +133,8 @@ export async function recommendFor(b: StructuredBrief, opts: { excludeUserId?: s
   const pool = rows.filter((r) => r.s.sellerId !== opts.excludeUserId);
   if (!pool.length) return [];
   const records = await sellerRecords([...new Set(pool.map((r) => r.s.sellerId))], b.category);
-  const kws = keywordsOf([b.title, b.goal, ...(b.deliverables ?? []), ...(b.answers ?? []).map((a) => a.a)].join(" "));
+  // The client's own words only: generated deliverables share boilerplate with every service.
+  const kws = keywordsOf([b.title, b.goal, ...(b.answers ?? []).map((a) => a.a)].join(" "));
   const categoryLabel = { content: "المحتوى", media: "الميديا", code: "البرمجة" }[b.category];
 
   const scored = pool.map(({ s, p }) => {
@@ -114,13 +144,17 @@ export async function recommendFor(b: StructuredBrief, opts: { excludeUserId?: s
     const fit = Math.min(hits.length, 6) * 2;
     const proof = Math.log2(1 + rec.similar) * 2 + (rec.onTimeRate ?? 0.7) * 2 + (rec.ratingCount ? rec.rating - 3 : 1) + Math.min(rec.repeatClients, 3) * 0.5;
     const pinned = s.id === opts.pinServiceId ? 100 : 0;
+    const gender: Gender = p.gender === "f" ? "f" : "m";
     const reasons: string[] = [];
-    if (hits.length >= 2) reasons.push(`خدمته «${s.title}» تغطي اللي طلبته`);
-    reasons.push(...recordLines(rec, categoryLabel));
-    if (rec.completed === 0) reasons.push(`جديد على متقن — اجتاز الاختبار العملي${p.verificationScore ? ` بدرجة ${num(p.verificationScore)} من ١٠٠` : ""}`);
+    if (hits.length >= RECOMMEND_FLOOR.minHits) reasons.push(`${g(gender, "خدمته", "خدمتها")} «${s.title}» تغطي اللي طلبته`);
+    reasons.push(...recordLines(rec, categoryLabel, gender));
+    if (rec.completed === 0) reasons.push(`${g(gender, "جديد", "جديدة")} على متقن — ${g(gender, "اجتاز", "اجتازت")} الاختبار العملي${p.verificationScore ? ` بدرجة ${num(p.verificationScore)} من ١٠٠` : ""}`);
     return {
       sellerId: s.sellerId,
       sellerName: p.displayName,
+      gender,
+      hits: hits.length,
+      pinned: pinned > 0,
       headline: p.headline,
       city: p.city,
       portfolio: p.portfolio ?? [],
@@ -129,11 +163,19 @@ export async function recommendFor(b: StructuredBrief, opts: { excludeUserId?: s
       record: rec,
       reasons: reasons.slice(0, 4),
       score: fit + proof + pinned,
-    } satisfies Recommendation;
+    } satisfies Recommendation & { hits: number; pinned: boolean };
   });
+
+  // Fit and quality bar. The client's own pick from a service page is always kept.
+  const qualified = scored.filter((r) => r.pinned || (r.hits >= RECOMMEND_FLOOR.minHits && meetsFloor(r.record)));
+  // Nothing fits well: show at most the single closest match that still passes the quality bar.
+  const shortlist = qualified.length ? qualified : scored.filter((r) => r.hits >= 1 && meetsFloor(r.record)).sort((a, b2) => b2.score - a.score).slice(0, 1);
 
   // One service per freelancer: the client is choosing a person, not browsing a catalogue.
   const best = new Map<string, Recommendation>();
-  for (const r of scored.sort((a, b2) => b2.score - a.score)) if (!best.has(r.sellerId)) best.set(r.sellerId, r);
+  for (const r of shortlist.sort((a, b2) => b2.score - a.score)) {
+    if (best.has(r.sellerId)) continue;
+    best.set(r.sellerId, { sellerId: r.sellerId, sellerName: r.sellerName, gender: r.gender, headline: r.headline, city: r.city, portfolio: r.portfolio, verificationScore: r.verificationScore, service: r.service, record: r.record, reasons: r.reasons, score: r.score });
+  }
   return [...best.values()].slice(0, opts.limit ?? 3);
 }

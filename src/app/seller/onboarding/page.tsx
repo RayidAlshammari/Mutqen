@@ -48,7 +48,7 @@ export default async function OnboardingPage() {
         </Card>
       )}
       <OnboardingForm
-        defaults={{ displayName: p?.displayName ?? user.name, headline: p?.headline, bio: p?.bio, city: p?.city, freelanceDocNumber: p?.freelanceDocNumber, aiTools: p?.aiTools, portfolio: p?.portfolio, verificationCategory: p?.verificationCategory, verificationAnswer: p?.verificationAnswer, verificationUrl: p?.verificationUrl, nationalId: p?.nationalId }}
+        defaults={{ displayName: p?.displayName ?? user.name, gender: p?.gender, headline: p?.headline, bio: p?.bio, city: p?.city, freelanceDocNumber: p?.freelanceDocNumber, aiTools: p?.aiTools, portfolio: p?.portfolio, verificationCategory: p?.verificationCategory, verificationAnswer: p?.verificationAnswer, verificationUrl: p?.verificationUrl, nationalId: p?.nationalId }}
         quiz={CONDUCT_QUIZ.map(({ id, q, options }) => ({ id, q, options }))}
         uploads={uploadsEnabled()}
         userId={user.id}

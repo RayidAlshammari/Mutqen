@@ -23,6 +23,7 @@ const catEnum = z.enum(CATEGORY_KEYS as [Category, ...Category[]]);
 
 const profileFields = {
   displayName: z.string().trim().min(2, "اكتب اسمك الظاهر").max(60),
+  gender: z.enum(["m", "f"]).default("m"),
   headline: z.string().trim().min(5, "اكتب وصف مختصر لتخصصك").max(90),
   bio: z.string().trim().max(1500).default(""),
   city: z.string().trim().max(40).optional(),
@@ -66,6 +67,7 @@ function readProfile(formData: FormData) {
     .filter(Boolean);
   return {
     displayName: formData.get("displayName"),
+    gender: formData.get("gender") === "f" ? "f" : "m",
     headline: formData.get("headline"),
     bio: formData.get("bio") ?? "",
     city: formData.get("city") || undefined,
@@ -78,6 +80,7 @@ function readProfile(formData: FormData) {
 function profileValues(d: z.infer<typeof profileOnlySchema>) {
   return {
     displayName: d.displayName,
+    gender: d.gender,
     headline: d.headline,
     bio: d.bio,
     city: d.city ?? null,

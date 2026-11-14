@@ -13,7 +13,7 @@ export default async function FreelancerPage({ params }: { params: Promise<{ id:
   if (!data || data.profile.status !== "approved") notFound();
   const { profile: p, services, reviews, ratingAvg, completed } = data;
   const record = (await sellerRecords([p.userId])).get(p.userId)!;
-  const facts = recordLines(record);
+  const facts = recordLines(record, undefined, p.gender);
 
   return (
     <Container className="py-10">
@@ -62,7 +62,7 @@ export default async function FreelancerPage({ params }: { params: Promise<{ id:
             </div>
           </Card>
           <Card className="p-5">
-            <h2 className="font-bold">سجله على متقن</h2>
+            <h2 className="font-bold">{p.gender === "f" ? "سجلها على متقن" : "سجله على متقن"}</h2>
             {facts.length ? (
               <ul className="mt-3 space-y-1.5 text-sm leading-6">
                 {facts.map((f) => (
@@ -70,7 +70,7 @@ export default async function FreelancerPage({ params }: { params: Promise<{ id:
                 ))}
               </ul>
             ) : (
-              <p className="mt-2 text-sm leading-6 text-stone-600">جديد على متقن. اجتاز الاختبار العملي وراجع الفريق شغله، وما عنده طلبات مكتملة بعد.</p>
+              <p className="mt-2 text-sm leading-6 text-stone-600">{p.gender === "f" ? "جديدة على متقن. اجتازت الاختبار العملي وراجع الفريق شغلها، وما عندها طلبات مكتملة بعد." : "جديد على متقن. اجتاز الاختبار العملي وراجع الفريق شغله، وما عنده طلبات مكتملة بعد."}</p>
             )}
             <p className="mt-3 text-xs leading-5 text-stone-500">الأرقام محسوبة من الطلبات الفعلية على المنصة، وما يقدر المستقل يعدّلها.</p>
           </Card>
@@ -96,7 +96,7 @@ export default async function FreelancerPage({ params }: { params: Promise<{ id:
         <div>
           {p.portfolio.length > 0 && (
             <>
-              <h2 className="mb-4 text-lg font-bold text-brand-950">أعماله</h2>
+              <h2 className="mb-4 text-lg font-bold text-brand-950">{p.gender === "f" ? "أعمالها" : "أعماله"}</h2>
               <ul className="mb-10 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {p.portfolio.map((it) => (
                   <li key={it.title}>
@@ -119,7 +119,7 @@ export default async function FreelancerPage({ params }: { params: Promise<{ id:
               </ul>
             </>
           )}
-          <h2 className="mb-4 text-lg font-bold text-brand-950">خدماته ({num(services.length)})</h2>
+          <h2 className="mb-4 text-lg font-bold text-brand-950">{p.gender === "f" ? "خدماتها" : "خدماته"} ({num(services.length)})</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             {services.map((s) => (
               <ServiceCard key={s.id} {...s} sellerName={p.displayName} sellerStatus={p.status} />

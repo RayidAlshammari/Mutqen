@@ -36,7 +36,7 @@ export default async function SellerProfilePage() {
         </p>
       </Card>
       <SellerProfileForm
-        defaults={{ displayName: p.displayName, headline: p.headline, bio: p.bio, city: p.city, freelanceDocNumber: p.freelanceDocNumber, categories: p.categories, aiTools: p.aiTools, portfolio: p.portfolio }}
+        defaults={{ displayName: p.displayName, gender: p.gender, headline: p.headline, bio: p.bio, city: p.city, freelanceDocNumber: p.freelanceDocNumber, categories: p.categories, aiTools: p.aiTools, portfolio: p.portfolio }}
         categories={CATEGORIES}
         tools={AI_TOOLS}
         cities={SAUDI_CITIES}

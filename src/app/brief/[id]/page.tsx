@@ -38,14 +38,14 @@ function Candidate({ r, briefId, pinned, tier }: { r: Recommendation; briefId: s
         <div className="text-left">
           <Stars value={r.record.rating} count={r.record.ratingCount} />
           <Link href={`/freelancers/${r.sellerId}`} target="_blank" className="mt-1 block text-xs font-semibold text-brand-700 hover:underline">
-            ملفه وأعماله ↗
+            {r.gender === "f" ? "ملفها وأعمالها ↗" : "ملفه وأعماله ↗"}
           </Link>
         </div>
       </div>
 
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <div>
-          <p className="text-xs font-semibold text-stone-500">ليش رشّحناه</p>
+          <p className="text-xs font-semibold text-stone-500">{r.gender === "f" ? "ليش رشّحناها" : "ليش رشّحناه"}</p>
           <ul className="mt-2 space-y-1.5 text-sm leading-6">
             {r.reasons.map((x) => (
               <li key={x} className="flex gap-2">
@@ -56,7 +56,7 @@ function Candidate({ r, briefId, pinned, tier }: { r: Recommendation; briefId: s
           </ul>
         </div>
         <div>
-          <p className="text-xs font-semibold text-stone-500">من أعماله</p>
+          <p className="text-xs font-semibold text-stone-500">{r.gender === "f" ? "من أعمالها" : "من أعماله"}</p>
           {shots.length ? (
             <div className="mt-2 grid grid-cols-3 gap-2">
               {shots.map((p) => (
@@ -71,7 +71,7 @@ function Candidate({ r, briefId, pinned, tier }: { r: Recommendation; briefId: s
               ))}
             </ul>
           ) : (
-            <p className="mt-2 text-sm text-stone-500">ما أضاف أعمال بعد. شوف نتيجة اختباره في ملفه.</p>
+            <p className="mt-2 text-sm text-stone-500">{r.gender === "f" ? "ما أضافت أعمال بعد. شوف نتيجة اختبارها في ملفها." : "ما أضاف أعمال بعد. شوف نتيجة اختباره في ملفه."}</p>
           )}
         </div>
       </div>
@@ -199,7 +199,11 @@ export default async function BriefPage({ params }: { params: Promise<{ id: stri
           <div className="mt-10 mb-4">
             <h2 className="text-xl font-bold text-brand-950">{recs.length ? "رشّحنا لك" : "ما لقينا مستقل مناسب الحين"}</h2>
             <p className="mt-1 text-sm text-stone-600">
-              {recs.length ? "الترشيح مبني على سجل المستقل الفعلي في متقن: وش أنجز، وهل سلّم في الموعد، وكم يأخذ عشان يرد." : "خلّ متقن يدير الطلب وبنلقى لك المستقل المناسب، أو تصفّح كل الخدمات."}
+              {recs.length >= 3
+                ? "الترشيح مبني على سجل المستقل الفعلي في متقن: وش أنجز، وهل سلّم في الموعد، وكم يأخذ عشان يرد."
+                : recs.length
+                  ? "نعرض بس اللي يطابق طلبك ويلتزم بمواعيده، حتى لو كان واحد. تبي خيارات أكثر؟ خلّ متقن يدير الطلب."
+                  : "خلّ متقن يدير الطلب وبنلقى لك المستقل المناسب، أو تصفّح كل الخدمات."}
             </p>
           </div>
           <div className="space-y-4">

@@ -22,7 +22,7 @@ export default async function AdminFreelancersPage() {
         <ul className="space-y-3">
           {rows.map(({ profile: p, email }) => {
             const rec = records.get(p.userId)!;
-            const facts = recordLines(rec);
+            const facts = recordLines(rec, undefined, p.gender);
             return (
               <li key={p.userId} className="rounded-2xl bg-white p-5 ring-1 ring-sand-200">
                 <div className="flex flex-wrap items-start justify-between gap-3">
