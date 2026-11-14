@@ -16,15 +16,16 @@ export const sampleDays = (deliveryDays: number) => Math.max(1, Math.ceil(delive
 export const acceptDeadline = (from = Date.now()) => new Date(from + ACCEPT_HOURS * HOUR);
 
 /**
- * delivered → completed, then release the freelancer's earning.
+ * delivered → completed. The freelancer's earning joins the payouts queue; nothing is said to
+ * have been transferred until the admin records the transfer.
  * Atomic: returns false (and writes nothing) if the order is no longer "delivered".
  */
 export async function completeOrder(orderId: string, actorId: string | null, note: string) {
   const done = await db.transaction(async (tx) => {
     const [o] = await tx
       .update(order)
-      .set({ status: "completed", completedAt: new Date() })
-      .where(and(eq(order.id, orderId), eq(order.status, "delivered")))
+      .set({ status: "completed", completedAt: new Date(), payoutStatus: "due" })
+      .where(and(eq(order.id, orderId), eq(order.status, "delivered"), eq(order.heldForReview, false)))
       .returning({ sellerEarning: order.sellerEarning, sellerId: order.sellerId, buyerId: order.buyerId });
     if (!o) return null;
     const now = Date.now();
@@ -35,14 +36,14 @@ export async function completeOrder(orderId: string, actorId: string | null, not
         orderId,
         actorId: null,
         type: "payment_released",
-        message: `تحوّل ${o.sellerEarning} ر.س للمستقل بعد خصم عمولة متقن.`,
+        message: `اعتُمد ${o.sellerEarning} ر.س للمستقل بعد خصم عمولة متقن، وأُضيف لقائمة التحويلات.`,
         createdAt: new Date(now + 1),
       },
     ]);
     return o;
   });
   if (!done) return false;
-  await notify(done.sellerId, { title: "اكتمل الطلب وتحوّل مبلغك", body: `تحوّل لك ${done.sellerEarning} ر.س.`, href: `/orders/${orderId}` });
+  await notify(done.sellerId, { title: "اكتمل الطلب واعتُمد مبلغك", body: `${done.sellerEarning} ر.س بتتحوّل لحسابك في يوم التحويل القادم.`, href: `/orders/${orderId}` });
   if (!actorId) await notify(done.buyerId, { title: "اكتمل طلبك تلقائياً", body: note, href: `/orders/${orderId}` });
   return true;
 }
@@ -53,7 +54,7 @@ export async function approveSample(orderId: string, actorId: string | null, not
     const [o] = await tx
       .update(order)
       .set({ status: "in_progress", stage: "full" })
-      .where(and(eq(order.id, orderId), eq(order.status, "sample_review")))
+      .where(and(eq(order.id, orderId), eq(order.status, "sample_review"), eq(order.heldForReview, false)))
       .returning({ sellerId: order.sellerId });
     if (!o) return null;
     await tx.insert(orderEvent).values({ id: newId("e_"), orderId, actorId, type: "sample_approved", message: note });
@@ -96,6 +97,7 @@ let lastSweep = 0;
  *  - a freelancer who doesn't accept in time → full refund to the client
  *  - a sample left unreviewed → the direction is approved so work continues
  *  - a delivery left unreviewed → the order completes and the freelancer is paid
+ * Work held for the team's review (managed orders) waits too: the client hasn't seen it yet.
  * Disputed orders are never touched: their timers are paused until the admin decides.
  */
 export async function sweepStaleOrders(force = false) {
@@ -107,10 +109,10 @@ export async function sweepStaleOrders(force = false) {
   const unaccepted = await db.select({ id: order.id }).from(order).where(and(eq(order.status, "awaiting_acceptance"), lt(order.acceptBy, now))).limit(100);
   for (const { id } of unaccepted) await refundUnaccepted(id, null, `المستقل ما قبل الطلب خلال ${ACCEPT_HOURS} ساعة.`);
 
-  const samples = await db.select({ id: order.id }).from(order).where(and(eq(order.status, "sample_review"), lt(order.sampleDeliveredAt, cutoff))).limit(100);
+  const samples = await db.select({ id: order.id }).from(order).where(and(eq(order.status, "sample_review"), eq(order.heldForReview, false), lt(order.sampleDeliveredAt, cutoff))).limit(100);
   for (const { id } of samples) await approveSample(id, null, `اعتُمد اتجاه العيّنة تلقائياً لعدم وجود رد خلال ${AUTO_COMPLETE_DAYS} أيام.`);
 
-  const delivered = await db.select({ id: order.id }).from(order).where(and(eq(order.status, "delivered"), lt(order.deliveredAt, cutoff))).limit(100);
+  const delivered = await db.select({ id: order.id }).from(order).where(and(eq(order.status, "delivered"), eq(order.heldForReview, false), lt(order.deliveredAt, cutoff))).limit(100);
   for (const { id } of delivered) await completeOrder(id, null, `اكتمل الطلب تلقائياً لعدم وجود رد خلال ${AUTO_COMPLETE_DAYS} أيام من التسليم.`);
 }
 

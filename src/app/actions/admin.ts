@@ -2,13 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
+import { newId } from "@/lib/id";
 import { db, schema } from "@/db";
 import { requireRole } from "@/lib/session";
 import { notify } from "@/lib/notify";
 import { cleanText } from "@/lib/ai";
 import { MANAGED_FEE } from "@/lib/constants";
 
-const { sellerProfile, managedRequest, service, brief } = schema;
+const { sellerProfile, managedRequest, service, brief, order, orderEvent } = schema;
 
 export type AdminState = { error?: string; ok?: boolean } | undefined;
 
@@ -80,3 +81,33 @@ export async function offerManagedAction(_: AdminState, formData: FormData): Pro
   revalidatePath("/admin/managed");
   return { ok: true };
 }
+
+/**
+ * Records a manual bank transfer for everything due to one freelancer. Until a payment provider
+ * splits payouts automatically, the team transfers weekly and marks it here.
+ */
+export async function markPaidAction(_: AdminState, formData: FormData): Promise<AdminState> {
+  const admin = await requireRole("admin", "/admin/payouts");
+  const sellerId = String(formData.get("sellerId") ?? "");
+  const ref = cleanText(formData.get("ref"), 60) || null;
+  const [p] = await db.select({ iban: sellerProfile.iban }).from(sellerProfile).where(eq(sellerProfile.userId, sellerId)).limit(1);
+  if (!p?.iban) return { error: "المستقل ما أضاف حساب تحويل." };
+  const paid = await db.transaction(async (tx) => {
+    const rows = await tx
+      .update(order)
+      .set({ payoutStatus: "paid", paidOutAt: new Date(), payoutRef: ref })
+      .where(and(eq(order.sellerId, sellerId), eq(order.status, "completed"), eq(order.payoutStatus, "due")))
+      .returning({ id: order.id, earning: order.sellerEarning });
+    if (!rows.length) return [];
+    await tx.insert(orderEvent).values(
+      rows.map((r) => ({ id: newId("e_"), orderId: r.id, actorId: admin.id, type: "payout_sent", message: `تحوّل ${r.earning} ر.س لحساب المستقل${ref ? ` (مرجع ${ref})` : ""}.` })),
+    );
+    return rows;
+  });
+  if (!paid.length) return { error: "ما فيه مبالغ مستحقة لهذا المستقل." };
+  const total = paid.reduce((a, r) => a + r.earning, 0);
+  await notify(sellerId, { title: "تحوّل مبلغك", body: `${total} ر.س عن ${paid.length === 1 ? "طلب واحد" : `${paid.length} طلبات`} وصلت لحسابك البنكي.`, href: "/dashboard" });
+  revalidatePath("/admin/payouts");
+  return { ok: true };
+}
+

@@ -295,6 +295,8 @@ const PORTFOLIO: Record<string, PortfolioItem[]> = {
   khaled: [{ title: "لوحة مبيعات يومية", description: "تقارير حيّة من ملفات الإكسل.", image: "/demo/dashboard.svg" }],
 };
 
+const FEMALE = new Set(["noura", "reem", "lama", "sara", "hind"]);
+
 const PENDING: SellerSeed = {
   key: "hind",
   name: "هند الغامدي",
@@ -599,6 +601,7 @@ async function main() {
       status: isPending ? "pending" : "approved",
       identityVerified: !isPending,
       conductScore: isPending ? 75 : 100,
+      gender: FEMALE.has(s.key) ? "f" : "m",
       verificationCategory: s.categories[0],
       verificationTask: "مهمة التحقق العملية",
       verificationAnswer: isPending ? PENDING_ANSWER : "شرح خطوات العمل والأدوات والتعديلات اليدوية (بيانات عرض).",
@@ -694,6 +697,10 @@ async function main() {
       disputePrevStatus: sc.status === "disputed" ? "sample_review" : null,
       deliveredAt,
       completedAt,
+      // Older completions were paid out; the last 10 days are still due, so the payouts queue has work.
+      payoutStatus: completedAt ? (sc.daysAgo > 10 ? "paid" : "due") : "none",
+      paidOutAt: completedAt && sc.daysAgo > 10 ? new Date(completedAt.getTime() + 3 * DAY) : null,
+      payoutRef: completedAt && sc.daysAgo > 10 ? `TR-${id.slice(2, 8).toUpperCase()}` : null,
       createdAt,
     });
     live[sc.status] ??= id;
@@ -717,7 +724,8 @@ async function main() {
     if (sc.status === "cancelled") await ev("cancelled", new Date(createdAt.getTime() + 24 * HOUR), null, `ما قبل المستقل الطلب خلال 24 ساعة. رجع المبلغ كامل (${fees.total} ر.س) للعميل تلقائياً.`);
     if (completedAt) {
       await ev("completed", completedAt, buyerId, "اعتمد العميل التسليم.");
-      await ev("payment_released", completedAt, null, `تحوّل ${fees.sellerEarning} ر.س للمستقل بعد عمولة المنصة (${Math.round(fees.rate * 100)}٪).`);
+      await ev("payment_released", completedAt, null, `اعتُمد ${fees.sellerEarning} ر.س للمستقل بعد عمولة المنصة (${Math.round(fees.rate * 100)}٪)، وأُضيف لقائمة التحويلات.`);
+      if (sc.daysAgo > 10) await ev("payout_sent", new Date(completedAt.getTime() + 3 * DAY), adminId, `تحوّل ${fees.sellerEarning} ر.س لحساب المستقل.`);
       together.set(pairKey, (together.get(pairKey) ?? 0) + 1);
     }
 

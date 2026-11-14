@@ -109,6 +109,8 @@ export const sellerProfile = pgTable(
     identityVerified: boolean("identity_verified").notNull().default(false),
     /** Short scenario quiz on scoping and managing client expectations (0-100). */
     conductScore: integer("conduct_score"),
+    /** Used only for Arabic grammar ("أنجز" / "أنجزت"). */
+    gender: text("gender").$type<"m" | "f">().notNull().default("m"),
     // AI skill verification
     verificationCategory: text("verification_category"),
     verificationTask: text("verification_task"),
@@ -206,7 +208,7 @@ export const brief = pgTable(
     ownerKey: text("owner_key"),
     input: text("input").notNull(),
     category: text("category").$type<Category>().notNull(),
-    questions: jsonb("questions").$type<{ id: string; q: string; hint?: string; options?: string[]; multi?: boolean }[]>().notNull().default([]),
+    questions: jsonb("questions").$type<{ id: string; q: string; hint?: string; options?: string[]; multi?: boolean; required?: boolean }[]>().notNull().default([]),
     /** Set when the client started from a specific service page. */
     serviceId: text("service_id"),
     tier: text("tier"),
@@ -286,6 +288,12 @@ export const order = pgTable(
     disputePrevStatus: text("dispute_prev_status").$type<OrderStatus>(),
     /** Part of the price returned to the client when a dispute ends in a partial refund. */
     refundAmount: integer("refund_amount").notNull().default(0),
+    /** Freelancer payout after completion: none → due → paid (sent manually until a provider handles splits). */
+    payoutStatus: text("payout_status").$type<"none" | "due" | "paid">().notNull().default("none"),
+    payoutRef: text("payout_ref"),
+    paidOutAt: timestamp("paid_out_at", { withTimezone: true }),
+    /** Managed orders: a sample or delivery waits for the team's review before the client sees it. */
+    heldForReview: boolean("held_for_review").notNull().default(false),
     deliveredAt: timestamp("delivered_at"),
     completedAt: timestamp("completed_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),

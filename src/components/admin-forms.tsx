@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useFormAction } from "./use-form-action";
-import { offerManagedAction, reviewSellerAction, revokeSellerAction } from "@/app/actions/admin";
+import { markPaidAction, offerManagedAction, reviewSellerAction, revokeSellerAction } from "@/app/actions/admin";
 import { Button, FormError, Input, Label, Textarea } from "./ui";
 
 export function ReviewSellerForm({ userId }: { userId: string }) {
@@ -87,6 +87,24 @@ export function ManagedOfferForm({ requestId, options, current }: { requestId: s
       <Button type="submit" size="sm" disabled={pending || !options.length}>
         {pending ? "يرسل…" : current ? "حدّث الترشيح" : "أرسل الترشيح للعميل"}
       </Button>
+    </form>
+  );
+}
+
+export function MarkPaidForm({ sellerId, total }: { sellerId: string; total: string }) {
+  const [state, onSubmit, pending] = useFormAction(markPaidAction, undefined);
+  if (state?.ok) return <p className="rounded-xl bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-800 ring-1 ring-emerald-200">سُجّل التحويل ووصل المستقل إشعار ✓</p>;
+  return (
+    <form onSubmit={onSubmit} className="flex flex-wrap items-end gap-2">
+      <input type="hidden" name="sellerId" value={sellerId} />
+      <div className="min-w-48 flex-1">
+        <Label htmlFor={`ref-${sellerId}`}>رقم الحوالة (اختياري)</Label>
+        <Input id={`ref-${sellerId}`} name="ref" maxLength={60} dir="ltr" placeholder="TR-…" />
+      </div>
+      <Button type="submit" size="sm" disabled={pending}>
+        {pending ? "يسجّل…" : `حوّلت ${total}`}
+      </Button>
+      <FormError message={state?.error} />
     </form>
   );
 }

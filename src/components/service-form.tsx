@@ -7,13 +7,27 @@ import type { Category } from "@/db/schema";
 import { Button, Card, FormError, Hint, Input, Label, Select, Textarea } from "./ui";
 import { cn } from "@/lib/utils";
 
+/** What reaches the freelancer for a listed price (kept in step with FEES.commissionRate). */
+const net = (price: number, rate: number) => Math.round(price * (1 - rate));
+
+function PriceField({ tier, initial, rate }: { tier: string; initial: number; rate: number }) {
+  const [price, setPrice] = useState(initial);
+  return (
+    <div>
+      <Label className="text-xs">السعر للعميل ر.س</Label>
+      <Input name={`${tier}_price`} type="number" min={50} value={price} onChange={(e) => setPrice(Number(e.target.value) || 0)} required />
+      <p className="mt-1 text-xs font-semibold text-emerald-800">يوصلك {net(price, rate).toLocaleString("ar-SA")} ر.س</p>
+    </div>
+  );
+}
+
 const TIERS = [
   { tier: "basic", name: "أساسية", price: 300, days: 2, rev: 1, features: "مخرج واحد جاهز\nتعديل واحد" },
   { tier: "standard", name: "متقدمة", price: 650, days: 3, rev: 2, features: "3 مخرجات\nتعديلين\nملفات المصدر" },
   { tier: "premium", name: "شاملة", price: 1200, days: 5, rev: 3, features: "حزمة كاملة\n3 تعديلات\nملفات المصدر\nدعم بعد التسليم" },
 ] as const;
 
-export function ServiceForm({ categories, tools, allowed }: { categories: Record<Category, { label: string; icon: string }>; tools: Record<Category, string[]>; allowed: Category[] }) {
+export function ServiceForm({ categories, tools, allowed, commissionRate }: { categories: Record<Category, { label: string; icon: string }>; tools: Record<Category, string[]>; allowed: Category[]; commissionRate: number }) {
   const [state, action, pending] = useFormAction(createServiceAction, undefined);
   const [cat, setCat] = useState<Category>(allowed[0] ?? "content");
   return (
@@ -56,10 +70,7 @@ export function ServiceForm({ categories, tools, allowed }: { categories: Record
           <Card key={t.tier} className={cn("space-y-3 p-5", t.tier === "standard" && "ring-2 ring-brand-300")}>
             <Input name={`${t.tier}_name`} defaultValue={t.name} aria-label="اسم الباقة" className="font-bold" />
             <div className="grid grid-cols-3 gap-2">
-              <div>
-                <Label className="text-xs">السعر ر.س</Label>
-                <Input name={`${t.tier}_price`} type="number" min={50} defaultValue={t.price} required />
-              </div>
+              <PriceField tier={t.tier} initial={t.price} rate={commissionRate} />
               <div>
                 <Label className="text-xs">أيام</Label>
                 <Input name={`${t.tier}_days`} type="number" min={1} defaultValue={t.days} required />
