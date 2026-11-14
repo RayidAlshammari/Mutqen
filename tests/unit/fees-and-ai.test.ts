@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { computeFees, FEES } from "@/lib/constants";
 import { cleanText, gradeVerification, PASS_SCORE } from "@/lib/ai";
-import { composeBrief, startBrief, QUESTION_BANK } from "@/lib/brief";
+import { composeBrief, IDK, missingRequired, resolveAnswers, startBrief, QUESTION_BANK } from "@/lib/brief";
 import { CONDUCT_QUIZ, gradeConduct } from "@/lib/conduct";
 import { arCount, COUNT } from "@/lib/utils";
 
@@ -45,9 +45,10 @@ describe("guided brief (offline fallback)", () => {
       input: "أبي 12 منشور انستقرام لكافيهي",
       category: "content",
       answers: [
-        { q: "وش نشاطك، ومين عملاؤك؟", a: "مقهى مختص في حائل" },
-        { q: "كم قطعة تحتاج، ولأي منصة؟", a: "12 منشور انستقرام" },
-        { q: "بأي لهجة ونبرة؟", a: "نجدية" },
+        { id: "business", q: "وش نشاطك، ومين عملاؤك؟", a: "مقهى مختص في حائل" },
+        { id: "quantity", q: "كم قطعة تحتاج؟", a: "12 منشور + 4 ستوري" },
+        { id: "platform", q: "لأي منصة؟", a: "انستقرام" },
+        { id: "voice", q: "بأي لهجة ونبرة؟", a: "نجدية" },
       ],
       style: ["عصري"],
       colors: ["ترابي دافئ"],
@@ -56,10 +57,42 @@ describe("guided brief (offline fallback)", () => {
     });
     expect(brief.category).toBe("content");
     expect(brief.deliverables[0]).toContain("12 منشور");
-    expect(brief.acceptance?.length).toBeGreaterThanOrEqual(3);
+    expect(brief.deliverables[0]).toContain("انستقرام");
+    expect(brief.acceptance?.[0]).toContain("12 منشور");
+    expect(brief.acceptance).toContain("اللهجة نجدية");
     expect(brief.tone).toBe("نجدية");
     expect(brief.colors).toEqual(["ترابي دافئ"]);
     expect(brief.assets).toHaveLength(1);
+  });
+
+  it("answers 'I don't know' with a concrete, editable suggestion", async () => {
+    const { brief } = await composeBrief({
+      input: "أبي أحد يضبط لي السوشال ميديا حق الكافيه",
+      category: "content",
+      answers: [
+        { id: "business", q: "وش نشاطك، ومين عملاؤك؟", a: "كافيه" },
+        { id: "quantity", q: "كم قطعة تحتاج؟", a: IDK },
+        { id: "platform", q: "لأي منصة؟", a: IDK },
+      ],
+      style: [],
+      colors: [],
+      references: [],
+      assets: [],
+    });
+    expect(brief.deliverables[0]).toContain("12 منشور + 4 ستوري");
+    expect(brief.deliverables[0]).toContain("اقتراح متقن");
+    expect(brief.acceptance?.[0]).toMatch(/12/);
+  });
+
+  it("knows which required questions are still unanswered", () => {
+    expect(missingRequired(QUESTION_BANK.content, { business: "كافيه" })).toEqual(["كم قطعة تحتاج؟", "لأي منصة؟"]);
+    expect(missingRequired(QUESTION_BANK.code, { business: "متجر", type: "شات بوت", users: "العملاء يسألون عن الطلبات" })).toEqual([]);
+  });
+
+  it("picks a default size from the kind of media work", () => {
+    const r = resolveAnswers("media", { type: "شعار وهوية", quantity: IDK, use: "انستقرام" });
+    expect(r.values.quantity).toContain("شعار");
+    expect(r.suggested).toHaveLength(1);
   });
 });
 

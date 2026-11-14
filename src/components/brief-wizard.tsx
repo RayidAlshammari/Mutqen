@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { Button, FormError, Input, Textarea } from "./ui";
 import { useUpload } from "./upload-field";
 
-type Question = { id: string; q: string; hint?: string; options?: string[]; multi?: boolean };
+type Question = { id: string; q: string; hint?: string; options?: string[]; multi?: boolean; required?: boolean };
 type Answer = { picked: string[]; other: string };
 export type WizardInitial = { answers: Record<string, string>; style: string[]; colors: string[]; references: string[]; assets: BriefAsset[] };
 
@@ -21,9 +21,16 @@ const chip = (on: boolean) =>
 function splitInitial(q: Question, value: string | undefined): Answer {
   if (!value) return { picked: [], other: "" };
   if (!q.options) return { picked: [], other: value };
-  const parts = value.split("،").map((p) => p.trim()).filter(Boolean);
-  const picked = parts.filter((p) => q.options!.includes(p));
-  return { picked, other: parts.filter((p) => !q.options!.includes(p)).join("، ") };
+  // Options can contain a comma themselves ("ما أدري، اقترحوا علي"), so take whole options out first.
+  let rest = value;
+  const picked: string[] = [];
+  for (const o of q.options) {
+    if (rest.includes(o)) {
+      picked.push(o);
+      rest = rest.replace(o, "");
+    }
+  }
+  return { picked, other: rest.split("،").map((p) => p.trim()).filter(Boolean).join("، ") };
 }
 
 export function BriefWizard({ briefId, category, input, questions, initial, uploads }: { briefId: string; category: Category; input: string; questions: Question[]; initial: WizardInitial; uploads: boolean }) {
@@ -74,8 +81,9 @@ export function BriefWizard({ briefId, category, input, questions, initial, uplo
 
   function next() {
     setError(null);
-    if (current === "الأسئلة" && answered < Math.min(3, questions.length)) {
-      setError("جاوب على ثلاثة أسئلة على الأقل. كل جواب يقلّل التعديلات لاحقاً.");
+    const missing = questions.filter((q) => q.required && !valueOf(q));
+    if (current === "الأسئلة" && missing.length) {
+      setError(`جاوب على: ${missing.map((q) => q.q).join("، ")}. إذا ما تدري اختر «ما أدري، اقترحوا علي».`);
       return;
     }
     if (step < steps.length - 1) {
@@ -120,6 +128,7 @@ export function BriefWizard({ briefId, category, input, questions, initial, uplo
               <legend className="float-right mb-3 w-full font-bold text-brand-950">
                 <span className="ml-2 text-brand-600">{(i + 1).toLocaleString("ar-SA")}.</span>
                 {q.q}
+                {q.required && <span className="mr-1 text-red-600" aria-label="مطلوب">*</span>}
                 {q.multi && <span className="mr-2 text-xs font-normal text-stone-500">(تقدر تختار أكثر من واحد)</span>}
               </legend>
               {q.options ? (

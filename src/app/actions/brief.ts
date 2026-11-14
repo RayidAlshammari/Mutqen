@@ -8,7 +8,7 @@ import { db, schema } from "@/db";
 import { newId } from "@/lib/id";
 import { getCurrentUser } from "@/lib/session";
 import { clientIp, hit, LIMITS } from "@/lib/rate-limit";
-import { composeBrief, startBrief, QUESTION_BANK } from "@/lib/brief";
+import { composeBrief, missingRequired, startBrief, QUESTION_BANK } from "@/lib/brief";
 import type { Category } from "@/db/schema";
 import { ensureBriefKey, loadOwnBrief } from "@/lib/brief-access";
 import { cleanText } from "@/lib/ai";
@@ -89,9 +89,13 @@ export async function composeBriefAction(briefId: string, payload: unknown): Pro
   if (!ok) return { error: "وصلت الحد المسموح هذي الساعة. جرّب بعد شوي." };
 
   const answers = own.brief.questions
-    .map((q) => ({ q: q.q, a: cleanText(parsed.data.answers.find((x) => x.id === q.id)?.a ?? "", 600) }))
+    .map((q) => ({ id: q.id, q: q.q, a: cleanText(parsed.data.answers.find((x) => x.id === q.id)?.a ?? "", 600) }))
     .filter((x) => x.a);
-  if (answers.length < Math.min(3, own.brief.questions.length)) return { error: "جاوب على ثلاثة أسئلة على الأقل عشان يطلع الملخص واضح." };
+  // Briefs made before required questions existed carry no flag: fall back to the bank's.
+  const bank = QUESTION_BANK[own.brief.category];
+  const questions = own.brief.questions.map((q) => ({ ...q, required: q.required ?? bank.find((b) => b.id === q.id)?.required }));
+  const missing = missingRequired(questions, Object.fromEntries(answers.map((a) => [a.id, a.a])));
+  if (missing.length) return { error: `جاوب على: ${missing.join("، ")}. إذا ما تدري اختر «ما أدري، اقترحوا علي».` };
 
   const { brief: structured } = await composeBrief({
     input: own.brief.input,
