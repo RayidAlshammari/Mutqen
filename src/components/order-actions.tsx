@@ -63,6 +63,58 @@ export function NoteForm({
   );
 }
 
+/** A revision names the acceptance criterion that wasn't met; anything else is an add-on. */
+export function RevisionForm({ action, criteria, left }: { action: BoundAction; criteria: string[]; left: number }) {
+  const { state, run, pending, ref } = useResettingAction(action);
+  return (
+    <form ref={ref} onSubmit={run} className="space-y-3">
+      <Label>تعديل ضمن الملخص (باقي لك {left.toLocaleString("ar-SA")})</Label>
+      {criteria.length > 0 && (
+        <fieldset className="space-y-2">
+          <legend className="mb-1 text-xs text-stone-500">أي معيار قبول ما تحقق؟</legend>
+          {criteria.map((c) => (
+            <label key={c} className="flex items-start gap-2 rounded-lg bg-sand-50 p-2 text-sm ring-1 ring-sand-200">
+              <input type="radio" name="criterion" value={c} required className="mt-1 accent-brand-700" />
+              <span>{c}</span>
+            </label>
+          ))}
+          <p className="text-xs leading-5 text-stone-500">طلبك مو من هذي المعايير؟ هذا عمل إضافي: اطلب من المستقل عرض بسعر ومدة في الرسائل.</p>
+        </fieldset>
+      )}
+      <Textarea name="message" required placeholder="وش الناقص بالضبط؟ مثال: المنشور 4 ما فيه الشعار" className="min-h-20" aria-label="وش يتعدّل" />
+      <FormError message={state?.error} />
+      <Button type="submit" variant="secondary" disabled={pending} className="w-full">
+        {pending ? "…" : "اطلب تعديل"}
+      </Button>
+    </form>
+  );
+}
+
+/** Managed orders: the team releases a delivery to the client, or sends it back with notes. */
+export function TeamReviewForm({ action }: { action: BoundAction }) {
+  const [state, run, pending] = useFormAction(action, undefined);
+  const [decision, setDecision] = useState("pass");
+  return (
+    <form onSubmit={run} className="space-y-3">
+      <div className="space-y-2 text-sm">
+        <label className="flex items-center gap-2">
+          <input type="radio" name="decision" value="pass" checked={decision === "pass"} onChange={() => setDecision("pass")} className="accent-brand-700" />
+          يطابق الملخص، وصّله للعميل
+        </label>
+        <label className="flex items-center gap-2">
+          <input type="radio" name="decision" value="return" checked={decision === "return"} onChange={() => setDecision("return")} className="accent-brand-700" />
+          رجّعه للمستقل بملاحظات
+        </label>
+      </div>
+      <Textarea name="note" required={decision === "return"} placeholder={decision === "return" ? "وش يتعدّل قبل ما يوصل العميل؟" : "ملاحظة للعميل (اختياري)"} className="min-h-16" aria-label="ملاحظة المراجعة" />
+      <FormError message={state?.error} />
+      <Button type="submit" disabled={pending} className="w-full">
+        {pending ? "…" : "اعتمد المراجعة"}
+      </Button>
+    </form>
+  );
+}
+
 export function AddonOfferForm({ action }: { action: BoundAction }) {
   const { state, run, pending, ref } = useResettingAction(action);
   return (

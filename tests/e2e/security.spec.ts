@@ -105,3 +105,17 @@ test("each role lands where it works", async ({ browser }) => {
   await expect(buyer.page.getByRole("heading", { level: 1 })).toContainText("بجملة وحدة");
   await buyer.close();
 });
+
+test("phone numbers and handles in order messages are hidden and flagged", async ({ browser }) => {
+  const seller = await as(browser, DEMO.seller);
+  await seller.page.goto("/dashboard/orders");
+  await seller.page.locator('a[href^="/orders/o_"]', { hasText: "متجر عبق للعطور" }).first().click();
+  await seller.page.waitForURL("**/orders/o_*");
+  await seller.page.getByLabel("رسالة", { exact: true }).fill("خلنا نكمل واتساب ٠٥٥١٢٣٤٥٦٧ أسهل");
+  await seller.page.getByRole("button", { name: "إرسال" }).click();
+  await expect(seller.page.getByText("أخفينا وسيلة التواصل من رسالتك").first()).toBeVisible();
+  await expect(seller.page.getByText(/\[مخفي\]/).first()).toBeVisible();
+  await expect(seller.page.getByText("0551234567")).toHaveCount(0);
+  await expect(seller.page.getByText("٠٥٥١٢٣٤٥٦٧")).toHaveCount(0);
+  await seller.close();
+});

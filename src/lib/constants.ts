@@ -93,6 +93,12 @@ export const ORDER_STATUS: Record<string, { label: string; tone: "amber" | "blue
   cancelled: { label: "ملغي", tone: "gray" },
 };
 
+/** Managed orders: a delivery the team hasn't released yet reads as "with the team", not "delivered". */
+export const orderStatus = (status: string, heldForReview?: boolean) =>
+  heldForReview && (status === "sample_review" || status === "delivered")
+    ? ({ label: "يراجعه فريق متقن", tone: "blue" } as const)
+    : ORDER_STATUS[status];
+
 export const SELLER_STATUS: Record<string, { label: string; tone: "amber" | "green" | "gray" | "red" }> = {
   draft: { label: "لم يكتمل التسجيل", tone: "gray" },
   pending: { label: "بانتظار المراجعة", tone: "amber" },

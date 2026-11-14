@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/session";
 import { signOutAction } from "@/app/actions/auth";
 import { Container, LinkButton, Avatar } from "./ui";
 import { CATEGORIES, CATEGORY_KEYS, DEMO_MODE } from "@/lib/constants";
-import { num } from "@/lib/utils";
+import { num, supportWhatsApp } from "@/lib/utils";
 
 export function Logo({ light }: { light?: boolean }) {
   return (
@@ -68,6 +68,7 @@ export async function SiteHeader() {
                     <MenuLink href="/admin/orders">كل الطلبات</MenuLink>
                     <MenuLink href="/admin/managed">الطلبات المُدارة</MenuLink>
                     <MenuLink href="/admin/freelancers">المستقلون</MenuLink>
+                    <MenuLink href="/admin/payouts">التحويلات المستحقة</MenuLink>
                   </>
                 ) : (
                   <>
@@ -148,6 +149,13 @@ export function SiteFooter() {
             <li><Link href="/brief" className="hover:text-white">اطلب خدمة</Link></li>
             <li><Link href="/terms" className="hover:text-white">الشروط وسياسة الاستخدام</Link></li>
             <li><Link href="/privacy" className="hover:text-white">الخصوصية</Link></li>
+            {supportWhatsApp() && (
+              <li>
+                <a href={supportWhatsApp("السلام عليكم، عندي سؤال عن متقن")!} target="_blank" rel="noopener noreferrer" className="hover:text-white">
+                  كلّم فريق متقن (واتساب)
+                </a>
+              </li>
+            )}
           </ul>
         </div>
       </Container>

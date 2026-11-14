@@ -51,3 +51,10 @@ export const COUNT = {
   revisions: ["تعديل واحد", "تعديلين", "تعديلات", "تعديل"] as [string, string, string, string],
   clients: ["عميل واحد", "عميلين", "عملاء", "عميل"] as [string, string, string, string],
 };
+
+/** WhatsApp link to the Mutqen team (SUPPORT_WHATSAPP, international digits). Null when not configured. */
+export function supportWhatsApp(text?: string): string | null {
+  const digits = (process.env.SUPPORT_WHATSAPP ?? "").replace(/\D/g, "");
+  if (digits.length < 9) return null;
+  return `https://wa.me/${digits}${text ? `?text=${encodeURIComponent(text)}` : ""}`;
+}

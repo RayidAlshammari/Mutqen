@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { Badge, EmptyState } from "./ui";
-import { CATEGORIES, ORDER_STATUS } from "@/lib/constants";
+import { CATEGORIES, orderStatus } from "@/lib/constants";
 import { relativeTime, sar } from "@/lib/utils";
 import type { Category } from "@/db/schema";
 
 export type OrderRow = {
   id: string;
   status: string;
+  heldForReview?: boolean;
   price: number;
   buyerFee: number;
   sellerEarning: number;
@@ -23,7 +24,7 @@ export function OrdersList({ rows, as, empty }: { rows: OrderRow[]; as: "buyer" 
   return (
     <ul className="divide-y divide-sand-100 overflow-hidden rounded-2xl bg-white ring-1 ring-sand-200">
       {rows.map((r) => {
-        const st = ORDER_STATUS[r.status];
+        const st = orderStatus(r.status, r.heldForReview);
         return (
           <li key={r.id}>
             <Link href={`/orders/${r.id}`} className="flex flex-wrap items-center gap-4 p-4 hover:bg-sand-50">

@@ -14,6 +14,7 @@ import { hit, LIMITS } from "@/lib/rate-limit";
 import { DAY, acceptDeadline, approveSample, completeOrder, refundUnaccepted, sampleDays } from "@/lib/order-lifecycle";
 import { holdPayment } from "@/lib/payments";
 import { notify, notifyAdmins } from "@/lib/notify";
+import { maskContacts } from "@/lib/conduct";
 
 const { order, orderEvent, service, review, sellerProfile, brief, managedRequest } = schema;
 
@@ -206,7 +207,7 @@ export async function deliverSampleAction(orderId: string, _: ActionState, formD
     await db.transaction(async (tx) => {
       const moved = await tx
         .update(order)
-        .set({ status: "sample_review", sampleDeliveredAt: new Date() })
+        .set({ status: "sample_review", sampleDeliveredAt: new Date(), heldForReview: o.managed })
         .where(and(eq(order.id, orderId), eq(order.status, "in_progress"), eq(order.stage, "sample")))
         .returning({ id: order.id });
       if (!moved.length) throw new StaleOrderError();
@@ -215,7 +216,8 @@ export async function deliverSampleAction(orderId: string, _: ActionState, formD
   } catch (e) {
     return staleOr(e, "ما يمكن تسليم العيّنة في هذي المرحلة.");
   }
-  await notify(o.buyerId, { title: "العيّنة الأولى جاهزة", body: "شوفها واعتمد الاتجاه، أو قل وش يتغيّر قبل ما يكمّل المستقل.", href: `/orders/${orderId}` });
+  if (o.managed) await holdForTeam(orderId, "عيّنة");
+  else await notify(o.buyerId, { title: "العيّنة الأولى جاهزة", body: "شوفها واعتمد الاتجاه، أو قل وش يتغيّر قبل ما يكمّل المستقل.", href: `/orders/${orderId}` });
   return done(orderId);
 }
 
@@ -244,7 +246,7 @@ export async function requestSampleChangeAction(orderId: string, _: ActionState,
           // Changing direction costs time; the final deadline moves by the same amount.
           dueAt: o.dueAt ? new Date(o.dueAt.getTime() + extra) : null,
         })
-        .where(and(eq(order.id, orderId), eq(order.status, "sample_review"), gt(order.sampleChangesLeft, 0)))
+        .where(and(eq(order.id, orderId), eq(order.status, "sample_review"), eq(order.heldForReview, false), gt(order.sampleChangesLeft, 0)))
         .returning({ id: order.id });
       if (!moved.length) throw new StaleOrderError();
       await tx.insert(orderEvent).values({ id: newId("e_"), orderId, actorId: user.id, type: "sample_change", message: message.data });
@@ -269,7 +271,7 @@ export async function deliverOrderAction(orderId: string, _: ActionState, formDa
     await db.transaction(async (tx) => {
       const moved = await tx
         .update(order)
-        .set({ status: "delivered", deliveredAt: new Date() })
+        .set({ status: "delivered", deliveredAt: new Date(), heldForReview: o.managed })
         .where(
           and(
             eq(order.id, orderId),
@@ -283,7 +285,65 @@ export async function deliverOrderAction(orderId: string, _: ActionState, formDa
   } catch (e) {
     return staleOr(e, "ما يمكن التسليم في هذي المرحلة.");
   }
-  await notify(o.buyerId, { title: "وصلك التسليم الكامل", body: "راجعه واعتمده، أو اطلب تعديل ضمن الملخص.", href: `/orders/${orderId}` });
+  if (o.managed) await holdForTeam(orderId, "تسليم");
+  else await notify(o.buyerId, { title: "وصلك التسليم الكامل", body: "راجعه واعتمده، أو اطلب تعديل ضمن الملخص.", href: `/orders/${orderId}` });
+  return done(orderId);
+}
+
+/* ───────────── Managed orders: the team checks every delivery before the client sees it ───────────── */
+
+async function holdForTeam(orderId: string, what: string) {
+  await notifyAdmins({ title: `${what} في طلب مُدار ينتظر مراجعتك`, body: "راجعه مقابل الملخص ومعايير القبول قبل ما يوصل العميل.", href: `/orders/${orderId}` });
+}
+
+const teamReviewSchema = z.object({
+  decision: z.enum(["pass", "return"]),
+  note: z.string().trim().max(1000).optional().default(""),
+});
+
+export async function teamReviewAction(orderId: string, _: ActionState, formData: FormData): Promise<ActionState> {
+  const { user, o, isAdmin } = await loadOrderFor(orderId);
+  if (!o || !isAdmin) return { error: "غير مصرح." };
+  const parsed = teamReviewSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  const { decision, note } = parsed.data;
+  if (decision === "return" && note.length < 5) return { error: "اكتب للمستقل وش يتعدّل قبل ما يوصل العميل." };
+  const sample = o.status === "sample_review";
+  const held = and(eq(order.id, orderId), eq(order.heldForReview, true), inArray(order.status, ["sample_review", "delivered"]));
+  try {
+    await db.transaction(async (tx) => {
+      const now = new Date();
+      const moved = await tx
+        .update(order)
+        .set(
+          decision === "pass"
+            ? // The client's review window starts when the team releases the work, not when it was sent.
+              { heldForReview: false, ...(sample ? { sampleDeliveredAt: now } : { deliveredAt: now }) }
+            : { heldForReview: false, status: "in_progress", stage: sample ? "sample" : "full", dueAt: new Date(Date.now() + REVISION_DAYS * DAY) },
+        )
+        .where(held)
+        .returning({ id: order.id });
+      if (!moved.length) throw new StaleOrderError();
+      await tx.insert(orderEvent).values({
+        id: newId("e_"),
+        orderId,
+        actorId: user.id,
+        type: decision === "pass" ? "team_review_passed" : "team_review_returned",
+        message: decision === "pass" ? `راجع فريق متقن ${sample ? "العيّنة" : "التسليم"} مقابل الملخص ووصّله للعميل.${note ? ` ${note}` : ""}` : `رجّع فريق متقن ${sample ? "العيّنة" : "التسليم"} للمستقل قبل ما يوصل العميل: ${note}`,
+      });
+    });
+  } catch (e) {
+    return staleOr(e, "هذا التسليم انراجع أو تغيّرت حالته.");
+  }
+  if (decision === "pass") {
+    await notify(o.buyerId, sample
+      ? { title: "العيّنة الأولى جاهزة (راجعها فريق متقن)", body: "شوفها واعتمد الاتجاه، أو قل وش يتغيّر.", href: `/orders/${orderId}` }
+      : { title: "وصلك التسليم الكامل (راجعه فريق متقن)", body: "راجعه واعتمده، أو اطلب تعديل ضمن الملخص.", href: `/orders/${orderId}` });
+    await notify(o.sellerId, { title: "فريق متقن وصّل شغلك للعميل", href: `/orders/${orderId}` });
+  } else {
+    await notify(o.sellerId, { title: "ملاحظات فريق متقن قبل التسليم للعميل", body: note.slice(0, 200), href: `/orders/${orderId}` });
+  }
+  revalidatePath("/admin");
   return done(orderId);
 }
 
@@ -295,6 +355,11 @@ export async function requestRevisionAction(orderId: string, _: ActionState, for
   if (o.revisionsLeft <= 0) return { error: "استنفدت التعديلات المشمولة في الباقة." };
   const message = msgSchema.safeParse(formData.get("message"));
   if (!message.success) return { error: message.error.issues[0].message };
+  // A revision points at the acceptance criterion that wasn't met, so "ضمن الملخص" means something.
+  const criteria = o.structuredBrief?.acceptance ?? [];
+  const picked = String(formData.get("criterion") ?? "");
+  if (criteria.length > 0 && !criteria.includes(picked)) return { error: "اختر معيار القبول اللي ما تحقق. لو طلبك خارجها، اطلب من المستقل عرض عمل إضافي." };
+  const text = criteria.length > 0 ? `المعيار: ${picked}\n${message.data}` : message.data;
   try {
     await db.transaction(async (tx) => {
       const moved = await tx
@@ -305,15 +370,15 @@ export async function requestRevisionAction(orderId: string, _: ActionState, for
           // A revision gets its own clear deadline, so the order can never hang here.
           dueAt: new Date(Date.now() + REVISION_DAYS * DAY),
         })
-        .where(and(eq(order.id, orderId), eq(order.status, "delivered"), gt(order.revisionsLeft, 0)))
+        .where(and(eq(order.id, orderId), eq(order.status, "delivered"), eq(order.heldForReview, false), gt(order.revisionsLeft, 0)))
         .returning({ id: order.id });
       if (!moved.length) throw new StaleOrderError();
-      await tx.insert(orderEvent).values({ id: newId("e_"), orderId, actorId: user.id, type: "revision_requested", message: message.data });
+      await tx.insert(orderEvent).values({ id: newId("e_"), orderId, actorId: user.id, type: "revision_requested", message: text });
     });
   } catch (e) {
     return staleOr(e);
   }
-  await notify(o.sellerId, { title: "العميل طلب تعديل", body: message.data.slice(0, 200), href: `/orders/${orderId}` });
+  await notify(o.sellerId, { title: "العميل طلب تعديل", body: text.slice(0, 200), href: `/orders/${orderId}` });
   return done(orderId);
 }
 
@@ -412,8 +477,8 @@ export async function acceptAddonAction(orderId: string, eventId: string): Promi
 const DISPUTABLE: OrderStatus[] = ["in_progress", "sample_review", "delivered", "revision_requested"];
 
 export async function openDisputeAction(orderId: string, _: ActionState, formData: FormData): Promise<ActionState> {
-  const { user, o, isBuyer } = await loadOrderFor(orderId);
-  if (!o || !isBuyer) return { error: "غير مصرح." };
+  const { user, o, isBuyer, isSeller } = await loadOrderFor(orderId);
+  if (!o || !(isBuyer || isSeller)) return { error: "غير مصرح." };
   const reason = z.string().trim().min(10, "اشرح المشكلة بجملة أو جملتين").max(2000).safeParse(formData.get("message"));
   if (!reason.success) return { error: reason.error.issues[0].message };
   try {
@@ -430,7 +495,11 @@ export async function openDisputeAction(orderId: string, _: ActionState, formDat
     return staleOr(e);
   }
   await notifyAdmins({ title: "مشكلة في طلب تحتاج قرارك", body: reason.data.slice(0, 200), href: `/orders/${orderId}` });
-  await notify(o.sellerId, { title: "العميل رفع مشكلة لفريق متقن", body: "توقّف العدّاد. بنراجع ونرجع لكم.", href: `/orders/${orderId}` });
+  await notify(isBuyer ? o.sellerId : o.buyerId, {
+    title: isBuyer ? "العميل رفع مشكلة لفريق متقن" : "المستقل رفع ملاحظة لفريق متقن",
+    body: "توقّف العدّاد. بنراجع ونرجع لكم.",
+    href: `/orders/${orderId}`,
+  });
   return done(orderId);
 }
 
@@ -510,7 +579,8 @@ export async function cancelOrderAction(orderId: string): Promise<void> {
     : and(
         eq(order.id, orderId),
         eq(order.buyerId, user.id),
-        or(eq(order.status, "awaiting_acceptance"), and(inArray(order.status, ["in_progress", "revision_requested"]), lt(order.dueAt, new Date()))),
+        // A late revision is not here: the full work was already delivered, so the team decides (escalateLateRevisionAction).
+        or(eq(order.status, "awaiting_acceptance"), and(eq(order.status, "in_progress"), lt(order.dueAt, new Date()))),
       );
   let cancelled = false;
   await db.transaction(async (tx) => {
@@ -532,6 +602,31 @@ export async function cancelOrderAction(orderId: string): Promise<void> {
   revalidatePath(`/orders/${orderId}`);
 }
 
+/**
+ * The freelancer is late on a revision. The full work was already delivered, so a full refund
+ * isn't automatic: the order goes to the team, who refund fully, partly, or give more time.
+ */
+export async function escalateLateRevisionAction(orderId: string): Promise<void> {
+  const { user, o, isBuyer } = await loadOrderFor(orderId);
+  if (!o || !isBuyer) return;
+  const reason = "تأخر المستقل في تسليم التعديل بعد التسليم الكامل.";
+  const moved = await db.transaction(async (tx) => {
+    const rows = await tx
+      .update(order)
+      .set({ status: "disputed", disputeReason: reason, disputePrevStatus: "revision_requested" })
+      .where(and(eq(order.id, orderId), eq(order.buyerId, user.id), eq(order.status, "revision_requested"), lt(order.dueAt, new Date())))
+      .returning({ id: order.id });
+    if (!rows.length) return false;
+    await tx.insert(orderEvent).values({ id: newId("e_"), orderId, actorId: user.id, type: "disputed", message: reason });
+    return true;
+  });
+  if (moved) {
+    await notifyAdmins({ title: "تعديل متأخر يحتاج قرارك", body: reason, href: `/orders/${orderId}` });
+    await notify(o.sellerId, { title: "العميل رفع تأخر التعديل لفريق متقن", body: "توقّف العدّاد. سلّم التعديل أو وضّح للفريق في الرسائل.", href: `/orders/${orderId}` });
+  }
+  revalidatePath(`/orders/${orderId}`);
+}
+
 /* ───────────── Messages ───────────── */
 
 export async function sendMessageAction(orderId: string, _: ActionState, formData: FormData): Promise<ActionState> {
@@ -540,10 +635,23 @@ export async function sendMessageAction(orderId: string, _: ActionState, formDat
   if (["completed", "cancelled"].includes(o.status)) return { error: "الطلب مغلق." };
   const message = msgSchema.safeParse(formData.get("message"));
   if (!message.success) return { error: message.error.issues[0].message };
-  await db.insert(orderEvent).values({ id: newId("e_"), orderId, actorId: user.id, type: "message", message: message.data });
+  // The team may share contact details; the two parties may not (see conduct.ts).
+  const masked = isAdmin ? { text: message.data, hidden: false } : maskContacts(message.data);
+  await db.insert(orderEvent).values({ id: newId("e_"), orderId, actorId: user.id, type: "message", message: masked.text });
+  if (masked.hidden) {
+    await db.insert(orderEvent).values({
+      id: newId("e_"),
+      orderId,
+      actorId: null,
+      type: "contact_hidden",
+      message: "أخفينا وسيلة تواصل من الرسالة. التواصل والدفع داخل الطلب عشان المبلغ المحجوز يحمي الطرفين.",
+    });
+    await notifyAdmins({ title: "محاولة مشاركة وسيلة تواصل في طلب", body: masked.text.slice(0, 200), href: `/orders/${orderId}` });
+  }
   const others = [o.buyerId, o.sellerId].filter((id) => id !== user.id);
-  for (const uid of others) await notify(uid, { title: isAdmin ? "رسالة من فريق متقن" : "رسالة جديدة في طلبك", body: message.data.slice(0, 200), href: `/orders/${orderId}` });
-  return done(orderId);
+  for (const uid of others) await notify(uid, { title: isAdmin ? "رسالة من فريق متقن" : "رسالة جديدة في طلبك", body: masked.text.slice(0, 200), href: `/orders/${orderId}` });
+  const sent = done(orderId);
+  return masked.hidden ? { ...sent, error: "أخفينا وسيلة التواصل من رسالتك. خلّ التواصل داخل الطلب." } : sent;
 }
 
 /* ───────────── Review ───────────── */

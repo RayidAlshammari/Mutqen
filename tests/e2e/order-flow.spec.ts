@@ -1,6 +1,18 @@
 import { test, expect } from "@playwright/test";
 import { as, buildBrief, chooseFreelancer, fillSignUp, pay, uniqueEmail, DEMO } from "./helpers";
 
+const SELLERS: Record<string, string> = {
+  noura: "نورة العتيبي",
+  faisal: "فيصل القحطاني",
+  reem: "ريم الزهراني",
+  abdulaziz: "عبدالعزيز الحربي",
+  lama: "لمى الدوسري",
+  turki: "تركي العنزي",
+  omar: "عمر الشهري",
+  sara: "سارة المطيري",
+  khaled: "خالد السبيعي",
+};
+
 test("visitor builds a brief, signs up at payment, and the order runs from acceptance to review", async ({ browser, page }) => {
   // 1. No account yet: one sentence → questions → summary → three recommended freelancers.
   await buildBrief(page, "أبي 12 منشور انستقرام لكافيهي الجديد في حائل بلهجة قريبة");
@@ -47,9 +59,12 @@ test("visitor builds a brief, signs up at payment, and the order runs from accep
   await seller.page.getByRole("button", { name: "سلّم الطلب" }).click();
   await expect(seller.page.getByText("بانتظار الاعتماد").first()).toBeVisible();
   await page.reload();
-  await page.getByLabel(/تعديل ضمن الملخص/).fill("المنشور الثالث ما يذكر موعد الافتتاح، وهذا من معايير القبول.");
+  // A revision names the acceptance criterion that wasn't met.
+  await page.locator("input[name=criterion]").first().check();
+  await page.getByLabel("وش يتعدّل").fill("المنشور الثالث ما يذكر موعد الافتتاح.");
   await page.getByRole("button", { name: "اطلب تعديل" }).click();
   await expect(page.getByText("مطلوب تعديل").first()).toBeVisible();
+  await expect(page.getByText(/^المعيار: /).first()).toBeVisible();
   await seller.page.reload();
   await seller.page.getByLabel("رسالة التسليم").fill("أضفت الموعد للمنشور الثالث.");
   await seller.page.locator("input[name=url]").fill("https://drive.google.com/file/d/final2");
@@ -59,16 +74,17 @@ test("visitor builds a brief, signs up at payment, and the order runs from accep
   // 6. The client approves: money is released exactly once, then the review.
   await page.reload();
   await page.getByRole("button", { name: /أعتمد التسليم/ }).click();
-  await expect(page.getByText("✓ تحوّل المبلغ للمستقل.")).toBeVisible();
+  // Approval queues the payout; "transferred" is only said once the admin records the transfer.
+  await expect(page.getByText("✓ اعتُمد مبلغ المستقل، وبيتحوّل في يوم التحويل القادم.")).toBeVisible();
   await page.getByRole("radio", { name: "5 من 5" }).click();
   await page.fill("textarea[name=comment]", "شغل سريع ومرتب");
   await page.getByRole("button", { name: "أرسل التقييم" }).click();
   await expect(page.getByText("شغل سريع ومرتب")).toBeVisible();
-  await expect(page.locator("span.text-stone-500", { hasText: /^تحويل المبلغ$/ })).toHaveCount(1);
+  await expect(page.locator("span.text-stone-500", { hasText: /^اعتماد مبلغ المستقل$/ })).toHaveCount(1);
   await expect(page.getByRole("button", { name: "اطلبها مرة ثانية بنفس الملخص" })).toBeVisible();
 
   await seller.page.goto(orderUrl);
-  await expect(seller.page.getByText("صافي أرباحك")).toBeVisible();
+  await expect(seller.page.getByText("يوصلك", { exact: true })).toBeVisible();
   await seller.close();
 });
 
@@ -124,6 +140,10 @@ test("a dispute pauses the order until the admin decides", async ({ browser }) =
 test("managed service: the team proposes a freelancer and the client pays with the fixed fee", async ({ browser }) => {
   const admin = await as(browser, DEMO.admin);
   await admin.page.goto("/admin/managed");
+  // Remember which freelancer the team proposes, to log in as them below.
+  const picked = await admin.page.locator("select option:checked").first().textContent();
+  const sellerKey = Object.entries(SELLERS).find(([, name]) => picked?.includes(name))?.[0];
+  expect(sellerKey, `proposed freelancer: ${picked}`).toBeTruthy();
   await admin.page.getByLabel("سبب الترشيح").fill("سلّم طلبات مشابهة في الموعد وباقته ضمن الميزانية.");
   await admin.page.getByRole("button", { name: "أرسل الترشيح للعميل" }).click();
   await expect(admin.page.getByText("وصل الترشيح للعميل ✓")).toBeVisible();
@@ -135,7 +155,32 @@ test("managed service: the team proposes a freelancer and the client pays with t
   await client.page.waitForURL("**/brief/b_*");
   await expect(client.page.getByText("رسوم إدارة الطلب")).toBeVisible();
   await client.page.getByRole("link", { name: "وافق وادفع" }).click();
-  await pay(client.page);
+  const orderUrl = await pay(client.page);
   await expect(client.page.getByText("بانتظار قبول المستقل").first()).toBeVisible();
+
+  // On a managed order the team checks the sample before the client sees it.
+  const seller = await as(browser, sellerKey === "noura" ? DEMO.seller : `${sellerKey}@mutqen.demo`);
+  await seller.page.goto(orderUrl);
+  await seller.page.getByRole("button", { name: /أقبل الطلب/ }).click();
+  await seller.page.getByLabel("وش في العيّنة؟").fill("أول سيناريو للبوت على أسئلتكم الحقيقية.");
+  await seller.page.locator("input[name=url]").fill("https://drive.google.com/file/d/managed-sample");
+  await seller.page.getByRole("button", { name: "أرسل العيّنة للعميل" }).click();
+  await expect(seller.page.getByText("وصل شغلك لفريق متقن").first()).toBeVisible();
+  await seller.close();
+
+  await client.page.reload();
+  await expect(client.page.getByText("فريق متقن يراجع الشغل").first()).toBeVisible();
+  await expect(client.page.getByText("managed-sample")).toHaveCount(0);
+  await expect(client.page.getByRole("button", { name: /الاتجاه صح/ })).toHaveCount(0);
+
+  const team = await as(browser, DEMO.admin);
+  await team.page.goto(orderUrl);
+  await team.page.getByRole("button", { name: "اعتمد المراجعة" }).click();
+  await expect(team.page.getByText("مراجعة فريق متقن").first()).toBeVisible();
+  await team.close();
+
+  await client.page.reload();
+  await expect(client.page.getByText("managed-sample").first()).toBeVisible();
+  await expect(client.page.getByRole("button", { name: /الاتجاه صح/ })).toBeVisible();
   await client.close();
 });

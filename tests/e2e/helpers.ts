@@ -62,7 +62,7 @@ export async function buildBrief(page: Page, sentence: string, start = "/brief")
     }
     await page.getByRole("button", { name: "التالي" }).click();
   }
-  await expect(page.getByText("هذا اللي بيشتغل منه المستقل")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "هذا اللي بيشتغل منه المستقل" })).toBeVisible({ timeout: 30_000 });
   return new URL(page.url()).pathname;
 }
 

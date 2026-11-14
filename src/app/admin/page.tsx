@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Container, PageHeader, Stat, Card, Badge, ToolChip, EmptyState } from "@/components/ui";
 import { ReviewSellerForm } from "@/components/admin-forms";
 import { requireRole } from "@/lib/session";
-import { platformStats, pendingSellers, recentOrdersAdmin, disputedOrders, managedRequests, lateOrders } from "@/lib/queries";
+import { platformStats, pendingSellers, recentOrdersAdmin, disputedOrders, managedRequests, lateOrders, funnelStats, heldOrders } from "@/lib/queries";
 import { CATEGORIES, ORDER_STATUS } from "@/lib/constants";
 import { CONDUCT_PASS } from "@/lib/conduct";
 import { num, relativeTime, sar } from "@/lib/utils";
@@ -22,7 +22,17 @@ function Queue({ href, label, n, tone }: { href: string; label: string; n: numbe
 
 export default async function AdminPage() {
   await requireRole("admin", "/admin");
-  const [s, pending, orders, disputes, managed, late] = await Promise.all([platformStats(), pendingSellers(), recentOrdersAdmin(8), disputedOrders(), managedRequests(), lateOrders()]);
+  const [s, pending, orders, disputes, managed, late, f, held] = await Promise.all([
+    platformStats(),
+    pendingSellers(),
+    recentOrdersAdmin(8),
+    disputedOrders(),
+    managedRequests(),
+    lateOrders(),
+    funnelStats(),
+    heldOrders(),
+  ]);
+  const pct = (a: number, b: number) => (b ? `${num(Math.round((a / b) * 100))}٪` : "—");
   const takeRate = s.completedGmv ? (s.revenue / s.completedGmv) * 100 : 0;
   const repeat = s.buyers ? (s.repeatBuyers / s.buyers) * 100 : 0;
   const waitingOffer = managed.filter((m) => m.m.status === "new").length;
@@ -32,11 +42,42 @@ export default async function AdminPage() {
       <PageHeader title="لوحة الإدارة" subtitle="اللي يحتاج قرارك أولاً، ثم مؤشرات المنصة." />
 
       <h2 className="mb-3 font-bold text-stone-700">يحتاج تصرف</h2>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Queue href="#disputes" label="خلافات تنتظر قرار" n={disputes.length} tone="red" />
         <Queue href="/admin/managed" label="طلبات مُدارة تنتظر ترشيح" n={waitingOffer} tone="amber" />
         <Queue href="#verification" label="مستقلون بانتظار التوثيق" n={pending.length} tone="brand" />
         <Queue href="#late" label="طلبات متأخرة عن موعدها" n={late.length} tone="amber" />
+        <Queue href="#held" label="تسليمات مُدارة تنتظر مراجعتك" n={f.heldForReview} tone="red" />
+        <Queue href="/admin/payouts" label="مستقلون لهم تحويل مستحق" n={f.payoutsDue} tone="brand" />
+      </div>
+
+      {held.length > 0 && (
+        <>
+          <h2 id="held" className="mb-3 mt-10 scroll-mt-24 text-lg font-bold">تسليمات تنتظر مراجعة الفريق ({num(held.length)})</h2>
+          <ul className="space-y-3">
+            {held.map((h) => (
+              <li key={h.id}>
+                <Link href={`/orders/${h.id}`} className="block rounded-2xl bg-white p-5 ring-1 ring-red-200 hover:ring-2">
+                  <p className="font-bold">{h.serviceTitle}</p>
+                  <p className="mt-1 text-sm text-stone-600">
+                    {h.status === "sample_review" ? "عيّنة" : "تسليم كامل"} من {h.sellerName}
+                    {h.at ? ` · ${relativeTime(new Date(h.at))}` : ""}
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-brand-700">راجعه ووصّله للعميل ←</p>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      <h2 className="mb-3 mt-10 font-bold text-stone-700">من الملخص إلى الطلب</h2>
+      <p className="mb-3 text-sm text-stone-500">وين يوقف العملاء: كل رقم نسبته من اللي قبله.</p>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Stat label="بدأوا ملخص" value={num(f.started)} />
+        <Stat label="وصلوا لملخص جاهز" value={num(f.ready)} hint={pct(f.ready, f.started)} />
+        <Stat label="ملخصات صارت طلب" value={num(f.ordered)} hint={pct(f.ordered, f.ready)} />
+        <Stat label="عملاء رجعوا وطلبوا مرة ثانية" value={num(f.repeatBuyers)} hint={`من ${num(s.buyers)} عميل`} />
       </div>
 
       <h2 id="disputes" className="mb-3 mt-10 scroll-mt-24 text-lg font-bold">الخلافات ({num(disputes.length)})</h2>

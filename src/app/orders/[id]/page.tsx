@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Container, Card, Badge, Avatar, Button } from "@/components/ui";
-import { NoteForm, MessageForm, ReviewForm, AddonOfferForm, ResolveDisputeForm } from "@/components/order-actions";
+import { NoteForm, MessageForm, ReviewForm, AddonOfferForm, ResolveDisputeForm, RevisionForm, TeamReviewForm } from "@/components/order-actions";
 import {
   acceptOrderAction,
   declineOrderAction,
@@ -16,6 +16,8 @@ import {
   openDisputeAction,
   resolveDisputeAction,
   cancelOrderAction,
+  escalateLateRevisionAction,
+  teamReviewAction,
   sendMessageAction,
   submitReviewAction,
 } from "@/app/actions/orders";
@@ -24,8 +26,8 @@ import { getOrder } from "@/lib/queries";
 import { requireUser } from "@/lib/session";
 import { paymentsLive } from "@/lib/payments";
 import { uploadsEnabled } from "@/lib/uploads";
-import { ACCEPT_HOURS, AUTO_COMPLETE_DAYS, CATEGORIES, ORDER_STATUS } from "@/lib/constants";
-import { daysLabel, formatDate, num, relativeTime, sar } from "@/lib/utils";
+import { ACCEPT_HOURS, AUTO_COMPLETE_DAYS, CATEGORIES, orderStatus } from "@/lib/constants";
+import { daysLabel, formatDate, num, relativeTime, sar, supportWhatsApp } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import type { OrderStatus } from "@/db/schema";
 
@@ -58,7 +60,11 @@ const EVENT_LABEL: Record<string, string> = {
   disputed: "مشكلة مرفوعة لمتقن",
   dispute_resolved: "قرار متقن",
   completed: "اكتمال الطلب",
-  payment_released: "تحويل المبلغ",
+  payment_released: "اعتماد مبلغ المستقل",
+  payout_sent: "تحويل المبلغ للمستقل",
+  team_review_passed: "مراجعة فريق متقن",
+  team_review_returned: "ملاحظات فريق متقن",
+  contact_hidden: "تنبيه تواصل خارجي",
   cancelled: "إلغاء واسترداد",
 };
 
@@ -77,7 +83,7 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
   if (!isBuyer && !isSeller && !isAdmin) notFound();
 
   const statusKey = o.status;
-  const status = ORDER_STATUS[statusKey];
+  const status = orderStatus(statusKey, o.heldForReview);
   const effective = o.status === "disputed" ? (o.disputePrevStatus ?? "in_progress") : o.status;
   const step = stepIndex(effective, o.stage);
   const working = o.status === "in_progress" || o.status === "revision_requested";
@@ -85,11 +91,21 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
   const closed = o.status === "completed" || o.status === "cancelled";
   const sb = o.structuredBrief;
   const paid = o.price + o.buyerFee + o.managedFee;
+  // Managed orders: a delivery the team hasn't released yet stays out of the client's view.
+  const held = o.heldForReview && (o.status === "sample_review" || o.status === "delivered");
+  const heldEventId = held ? [...data.events].reverse().find(({ e }) => e.type === "sample_delivered" || e.type === "delivered")?.e.id : undefined;
+  const events = isBuyer && heldEventId ? data.events.filter(({ e }) => e.id !== heldEventId) : data.events;
+  const lateRevision = late && o.status === "revision_requested";
   const bind = <A extends unknown[], R>(fn: (id: string, ...a: A) => R) => fn.bind(null, o.id) as (...a: A) => R;
 
   // What this viewer is waiting for, in one line.
-  const waiting =
-    o.status === "awaiting_acceptance"
+  const waiting = held
+    ? isAdmin
+      ? "التسليم ينتظر مراجعتك قبل ما يوصل العميل."
+      : isSeller
+        ? "وصل شغلك لفريق متقن. يراجعه مقابل الملخص ويوصّله للعميل، أو يرجّع لك ملاحظات."
+        : "المستقل سلّم، وفريق متقن يراجع الشغل مقابل الملخص قبل ما يوصلك (عادة خلال يوم عمل)."
+    : o.status === "awaiting_acceptance"
       ? isSeller
         ? `اقبل الطلب أو اسأل العميل قبل ${o.acceptBy ? formatDate(o.acceptBy) : ""}. العدّاد يبدأ بعد قبولك.`
         : `المستقل عنده ${num(ACCEPT_HOURS)} ساعة يقبل أو يسألك. لو ما قبل، يرجع لك المبلغ كامل تلقائياً.`
@@ -216,7 +232,7 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
           <Card className="p-6">
             <h2 className="mb-4 font-bold text-brand-950">سجل الطلب</h2>
             <ol className="space-y-4">
-              {data.events.map(({ e, actorName }) => {
+              {events.map(({ e, actorName }) => {
                 const system = !e.actorId;
                 const offer = e.type === "addon_offer" ? (e.data as { price?: number; days?: number; accepted?: boolean; orderId?: string } | null) : null;
                 return (
@@ -286,9 +302,18 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
             )}
             {isSeller ? (
               <>
-                <div className="flex justify-between py-1"><span className="text-stone-600">سعر الطلب</span><span>{sar(o.price)}</span></div>
-                <div className="flex justify-between py-1"><span className="text-stone-600">عمولة متقن ({num(Math.round((o.platformCommission / Math.max(1, o.price - o.refundAmount)) * 100))}٪)</span><span>- {sar(o.platformCommission)}</span></div>
-                <div className="flex justify-between border-t border-sand-200 pt-2 font-bold"><span>صافي أرباحك</span><span>{sar(o.sellerEarning)}</span></div>
+                {/* The freelancer reads one number: what reaches them. The breakdown is there for whoever wants it. */}
+                <div className="mt-1 rounded-xl bg-emerald-50 px-4 py-3 ring-1 ring-emerald-200">
+                  <p className="text-xs text-emerald-800">يوصلك</p>
+                  <p className="text-2xl font-bold text-emerald-900">{sar(o.sellerEarning)}</p>
+                </div>
+                <details className="mt-2 text-xs text-stone-600">
+                  <summary className="cursor-pointer">كيف انحسب؟</summary>
+                  <div className="mt-2 space-y-1">
+                    <div className="flex justify-between"><span>السعر اللي دفعه العميل</span><span>{sar(o.price - o.refundAmount)}</span></div>
+                    <div className="flex justify-between"><span>حصة متقن</span><span>{sar(o.platformCommission)}</span></div>
+                  </div>
+                </details>
               </>
             ) : (
               <>
@@ -304,7 +329,13 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
               </>
             )}
             <p className="mt-3 text-xs text-stone-500">
-              {o.status === "completed" ? "✓ تحوّل المبلغ للمستقل." : o.status === "cancelled" ? "↩︎ رجع المبلغ للعميل." : "🔒 المبلغ محجوز لدى متقن."}
+              {o.status === "completed"
+                ? o.payoutStatus === "paid"
+                  ? `✓ تحوّل المبلغ للمستقل${o.paidOutAt ? ` في ${formatDate(o.paidOutAt)}` : ""}.`
+                  : "✓ اعتُمد مبلغ المستقل، وبيتحوّل في يوم التحويل القادم."
+                : o.status === "cancelled"
+                  ? "↩︎ رجع المبلغ للعميل."
+                  : "🔒 المبلغ محجوز لدى متقن."}
               {!paymentsLive() && " (بوابة الدفع في وضع الاختبار)"}
             </p>
           </Card>
@@ -349,7 +380,7 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
           )}
 
           {/* ── Client ── */}
-          {isBuyer && o.status === "sample_review" && (
+          {isBuyer && o.status === "sample_review" && !held && (
             <Card className="space-y-4 p-5">
               <h2 className="font-bold">راجع العيّنة الأولى</h2>
               <p className="text-xs leading-5 text-stone-500">إذا ما رديت خلال {num(AUTO_COMPLETE_DAYS)} أيام، يُعتمد الاتجاه تلقائياً عشان الشغل ما يوقف.</p>
@@ -363,7 +394,7 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
               )}
             </Card>
           )}
-          {isBuyer && o.status === "delivered" && (
+          {isBuyer && o.status === "delivered" && !held && (
             <Card className="space-y-4 p-5">
               <h2 className="font-bold">راجع التسليم</h2>
               <p className="text-xs leading-5 text-stone-500">قارنه بمعايير القبول في الملخص. إذا ما راجعته خلال {num(AUTO_COMPLETE_DAYS)} أيام، يكتمل الطلب تلقائياً ويتحوّل المبلغ للمستقل.</p>
@@ -371,13 +402,21 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
                 <Button type="submit" className="w-full">✓ أعتمد التسليم وحوّل المبلغ</Button>
               </form>
               {o.revisionsLeft > 0 ? (
-                <NoteForm action={bind(requestRevisionAction)} label={`تعديل ضمن الملخص (باقي لك ${num(o.revisionsLeft)})`} button="اطلب تعديل" variant="secondary" />
+                <RevisionForm action={bind(requestRevisionAction)} criteria={sb?.acceptance ?? []} left={o.revisionsLeft} />
               ) : (
                 <p className="text-xs text-stone-500">استنفدت التعديلات المشمولة. لو تبي شي إضافي، اطلب من المستقل عرض لعمل إضافي.</p>
               )}
             </Card>
           )}
-          {isBuyer && (o.status === "awaiting_acceptance" || late) && (
+          {isBuyer && lateRevision && (
+            <Card className="p-5">
+              <p className="text-sm leading-7 text-red-800">تأخر المستقل في التعديل. الشغل الكامل انسلّم قبل، فالقرار لفريق متقن: استرداد كامل أو جزئي أو وقت إضافي. المبلغ يبقى محجوز لين القرار.</p>
+              <form action={bind(escalateLateRevisionAction)} className="mt-3">
+                <Button type="submit" variant="danger" className="w-full">ارفع التأخير لفريق متقن</Button>
+              </form>
+            </Card>
+          )}
+          {isBuyer && (o.status === "awaiting_acceptance" || (late && !lateRevision)) && (
             <Card className="p-5">
               <p className={cn("text-sm", late ? "text-red-800" : "text-stone-600")}>
                 {late ? "تجاوز المستقل موعد التسليم. تقدر تلغي وتسترد المبلغ كامل." : "غيّرت رأيك؟ تقدر تلغي قبل ما يقبل المستقل ويرجع لك المبلغ كامل."}
@@ -397,7 +436,24 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
             </Card>
           )}
 
+          {isSeller && ["in_progress", "sample_review", "delivered", "revision_requested"].includes(o.status) && (
+            <Card className="p-5">
+              <details>
+                <summary className="cursor-pointer font-bold">عندي مشكلة</summary>
+                <p className="my-3 text-xs leading-5 text-stone-500">العميل ما يرد، أو يطلب تعديلات خارج الملخص كأنها مشمولة، أو تأخرت ملفاته؟ ارفعها لفريق متقن. يتوقف العدّاد فوراً عشان ما ينحسب عليك تأخير.</p>
+                <NoteForm action={bind(openDisputeAction)} label="وش المشكلة؟" button="ارفعها لفريق متقن" variant="danger" />
+              </details>
+            </Card>
+          )}
+
           {/* ── Admin ── */}
+          {isAdmin && held && (
+            <Card className="space-y-3 p-5">
+              <h2 className="font-bold">مراجعة فريق متقن قبل العميل</h2>
+              <p className="text-xs leading-5 text-stone-500">قارن {o.status === "sample_review" ? "العيّنة" : "التسليم"} بالملخص ومعايير القبول. العميل ما يشوفه إلا بعد ما توصّله.</p>
+              <TeamReviewForm action={bind(teamReviewAction)} />
+            </Card>
+          )}
           {isAdmin && o.status === "disputed" && (
             <Card className="space-y-3 p-5">
               <h2 className="font-bold">قرار في المشكلة</h2>
@@ -436,6 +492,16 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
             </form>
           )}
 
+          {!isAdmin && supportWhatsApp() && (
+            <a
+              href={supportWhatsApp(`السلام عليكم، عندي سؤال عن الطلب #${o.id.slice(2, 8).toUpperCase()}`)!}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block rounded-2xl bg-white p-4 text-center text-sm font-semibold text-brand-700 ring-1 ring-sand-200 hover:ring-brand-300"
+            >
+              تحتاج مساعدة؟ كلّم فريق متقن على واتساب
+            </a>
+          )}
           <Link href={isAdmin ? "/admin/orders" : "/dashboard/orders"} className="block text-center text-sm text-stone-500 hover:text-brand-700">
             ← كل الطلبات
           </Link>

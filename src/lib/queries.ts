@@ -134,6 +134,7 @@ export async function listOrdersForUser(userId: string, as: "buyer" | "seller") 
     .select({
       id: order.id,
       status: order.status,
+      heldForReview: order.heldForReview,
       price: order.price,
       buyerFee: order.buyerFee,
       sellerEarning: order.sellerEarning,
@@ -226,6 +227,7 @@ export async function recentOrdersAdmin(limit = 15) {
     .select({
       id: order.id,
       status: order.status,
+      heldForReview: order.heldForReview,
       price: order.price,
       revenue: sql<number>`${order.buyerFee} + ${order.platformCommission}`.mapWith(Number),
       createdAt: order.createdAt,
@@ -256,6 +258,7 @@ export async function listAllOrders(status?: string, limit = 200) {
     .select({
       id: order.id,
       status: order.status,
+      heldForReview: order.heldForReview,
       price: order.price,
       revenue: sql<number>`${order.buyerFee} + ${order.platformCommission}`.mapWith(Number),
       dueAt: order.dueAt,
@@ -328,4 +331,33 @@ export async function approvedSellers() {
     .innerJoin(user, eq(user.id, sellerProfile.userId))
     .where(eq(sellerProfile.status, "approved"))
     .orderBy(desc(sellerProfile.reviewedAt));
+}
+
+/** Brief → order funnel, plus the two money/quality queues the admin works every day. */
+export async function funnelStats() {
+  const { brief } = schema;
+  const [b] = await db
+    .select({
+      started: sql<number>`count(*)`.mapWith(Number),
+      ready: sql<number>`count(*) filter (where ${brief.structured} is not null)`.mapWith(Number),
+    })
+    .from(brief);
+  const [o] = await db
+    .select({
+      ordered: sql<number>`count(distinct ${order.briefId}) filter (where ${order.briefId} is not null)`.mapWith(Number),
+      repeatBuyers: sql<number>`(select count(*) from (select buyer_id from "order" where status <> 'cancelled' group by buyer_id having count(*) > 1) t)`.mapWith(Number),
+      payoutsDue: sql<number>`count(distinct ${order.sellerId}) filter (where ${order.status} = 'completed' and ${order.payoutStatus} = 'due')`.mapWith(Number),
+      heldForReview: sql<number>`count(*) filter (where ${order.heldForReview} and ${order.status} in ('sample_review','delivered'))`.mapWith(Number),
+    })
+    .from(order);
+  return { ...b, ...o };
+}
+
+export async function heldOrders() {
+  return db
+    .select({ id: order.id, status: order.status, serviceTitle: service.title, sellerName: user.name, at: sql<Date>`coalesce(${order.deliveredAt}, ${order.sampleDeliveredAt})` })
+    .from(order)
+    .innerJoin(service, eq(service.id, order.serviceId))
+    .innerJoin(user, eq(user.id, order.sellerId))
+    .where(and(eq(order.heldForReview, true), inArray(order.status, ["sample_review", "delivered"])));
 }
